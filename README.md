@@ -22,7 +22,7 @@ python3 scheduler.py dispatch
 python3 scheduler.py logs --running --lines 1000
 ```
 
-**待機ジョブを進めるには `dispatch` を使います。同じ JSON を再投入すると、別のジョブが追加されます。** GPU が空いた瞬間に自動起動する仕組みではありません。この PC では cron が毎時0分・30分に `dispatch` を実行します。
+**待機ジョブを進めるには `dispatch` を使います。同じ JSON を再投入すると、別のジョブが追加されます。** GPU が空いた瞬間に自動起動する仕組みではありません。この PC では cron が15分ごとに `dispatch` を実行します。
 
 ### 登録だけする・内容を確認する
 
@@ -137,7 +137,7 @@ docker cp ~/.local/share/job-scheduler/driver-libraries/580.173.02/lib \
 
 ## 自動投入（cron）
 
-この PC は `cron-dispatch.sh` を毎時0分・30分に実行します。PC 停止中は動きません。別PCへ clone しても crontab は引き継がれず、定期実行は起動している1台に設定すれば十分です。
+この PC は `cron-dispatch.sh` を15分ごとに実行し、`dispatch` の後に実行中ジョブの末尾1000行を `logs/current/` に保存します。PC 停止中は動きません。別PCへ clone しても crontab は引き継がれず、定期実行は起動している1台に設定すれば十分です。
 
 ```bash
 crontab -l
