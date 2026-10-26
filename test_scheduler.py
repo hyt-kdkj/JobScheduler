@@ -264,6 +264,27 @@ class SchedulingTest(unittest.TestCase):
         self.assertEqual(s.elapsed(dict(started=100), now=3761), '01:01:01')
         self.assertEqual(s.elapsed(dict(started=100, finished=160), now=5000), '00:01:00')
 
+    def test_status_hides_cancelled_and_sorts_by_state_without_changing_history(self):
+        states = ['queued', 'cancelled', 'running', 'failed', 'succeeded', 'queued']
+        jobs = []
+        for i, state in enumerate(states):
+            job = self.job()
+            job.update(status=state, created=i)
+            self.q.put(job)
+            jobs.append(job)
+        for extra, expected in (([], [4, 3, 2, 0, 5]),
+                                (['--all'], [4, 3, 2, 0, 5, 1])):
+            terminal = io.StringIO()
+            argv = ['scheduler.py', '--state-dir', str(self.q.directory),
+                    'status', '--local', *extra]
+            with patch.object(sys, 'argv', argv), patch.object(s, 'remote') as connect, \
+                 contextlib.redirect_stdout(terminal):
+                s.main()
+            connect.assert_not_called()
+            ids = [line.split()[0] for line in terminal.getvalue().splitlines()[1:]]
+            self.assertEqual(ids, [jobs[i]['id'][:8] for i in expected])
+        self.assertEqual(len(self.q.all()), len(jobs))
+
     def test_running_logs_groups_requests_by_host_and_saves_files(self):
         jobs = [self.job() for _ in range(3)]
         for job, host in zip(jobs, ('glockenspiel', 'glockenspiel', 'xylophone0')):

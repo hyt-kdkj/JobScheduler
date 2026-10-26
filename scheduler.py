@@ -341,8 +341,13 @@ def elapsed(job, now=None):
     return f'{hours:02}:{minutes:02}:{seconds:02}'
 
 
-def show_jobs(jobs):
+def show_jobs(jobs, include_cancelled=True):
     now = time.time()
+    order = {'succeeded': 0, 'failed': 1, 'running': 2, 'reserved': 2,
+             'dispatching': 2, 'cancelling': 2, 'unknown': 2, 'queued': 3,
+             'cancelled': 4}
+    jobs = sorted((j for j in jobs if include_cancelled or j['status'] != 'cancelled'),
+                  key=lambda j: (order.get(j['status'], 2), j['created'], j['id']))
     print(f'{"ID":8} {"STATE":12} {"HOST":13} {"GPU":3} {"EXIT":4} '
           f'{"ELAPSED":10} {"SYNC":9} NAME / COMMAND')
     for j in jobs:
@@ -518,6 +523,7 @@ def parser():
     s = sub.add_parser('status', help='Show completion state and exit codes')
     s.add_argument('--local', action='store_true', help='Show cached state without SSH')
     s.add_argument('--dispatch', action='store_true', help='Also try queued jobs once')
+    s.add_argument('--all', action='store_true', help='Include cancelled jobs')
     s = sub.add_parser('logs', help='Save the remote log tail to files, including after completion')
     s.add_argument('id', nargs='?')
     s.add_argument('--running', action='store_true', help='Get logs for all active jobs')
@@ -594,7 +600,7 @@ def main():
             refresh_shared(cfg, queue)
             refresh_status(queue)
             sync_completed(cfg, queue)
-        show_jobs(queue.all())
+        show_jobs(queue.all(), include_cancelled=args.all)
     elif args.action == 'logs':
         if args.lines < 1:
             raise ValueError('--lines must be positive')
