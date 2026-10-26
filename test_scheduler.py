@@ -273,12 +273,25 @@ class SchedulingTest(unittest.TestCase):
             return {'jobs': [dict(id=key, status='running', log='log-' + key)
                              for key in request['ids']]}
         output = Path(self.temp.name) / 'logs'
+        terminal = io.StringIO()
         with patch.object(s, 'remote', side_effect=reply) as connect, \
-             contextlib.redirect_stdout(io.StringIO()):
+             contextlib.redirect_stdout(terminal):
             s.running_logs(self.cfg, self.q, 200, output)
         self.assertEqual(connect.call_count, 2)
         self.assertEqual(len(list(output.glob('*.log'))), 3)
         self.assertTrue(all(c.args[1]['lines'] == 200 for c in connect.call_args_list))
+        for job in jobs:
+            self.assertEqual((output / s.log_filename(job)).read_text(), 'log-' + job['id'] + '\n')
+            self.assertNotIn('log-' + job['id'], terminal.getvalue())
+        self.assertEqual(terminal.getvalue().count('Saved:'), 3)
+
+    def test_logs_default_to_files_for_running_and_single_jobs(self):
+        for selection in (['--running'], ['1234abcd']):
+            args = s.parser().parse_args(['logs', *selection, '--lines', '200'])
+            self.assertEqual(args.output_dir, Path('logs/current'))
+            self.assertEqual(args.lines, 200)
+        args = s.parser().parse_args(['logs', '1234abcd', '--output-dir', 'logs/custom'])
+        self.assertEqual(args.output_dir, Path('logs/custom'))
 
     def test_log_files_use_job_names_and_keep_duplicate_names_distinct(self):
         jobs = [self.job(), self.job()]

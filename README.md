@@ -17,7 +17,7 @@ python3 scheduler.py dispatch
 | 状態を見るだけ | `python3 scheduler.py status` | いいえ |
 | 待機ジョブを進める | `python3 scheduler.py dispatch` | はい。実行枠と VRAM に余裕があれば開始 |
 | 状態確認と投入をまとめる | `python3 scheduler.py status --dispatch` | はい |
-| 実行中のログを見るだけ | `python3 scheduler.py logs --running --lines 200` | いいえ |
+| 実行中のログをファイルに保存 | `python3 scheduler.py logs --running --lines 200` | いいえ |
 
 `dispatch` はサブコマンド、`--dispatch` は `status` に付けるオプションです。`--dispach` という指定はありません。
 
@@ -100,21 +100,21 @@ python3 scheduler.py status
 
 通信失敗だけで学習を失敗扱いにはしません。`connection_error` が出たら、後で `status` を再実行してください。
 
-### 実行中のログをまとめて見る
+### 実行中のログをまとめて保存する
 
 ```bash
 python3 scheduler.py logs --running --lines 200
 ```
 
-実行中・起動準備中・停止要求中の各ジョブについて、末尾200行をまとめて表示します。見出しにはジョブ ID、サーバー、状態、ジョブ名が出ます。ログの問い合わせはサーバーごとにまとめます。
+実行中・起動準備中・停止要求中の各ジョブについて、末尾200行をカレントディレクトリの `logs/current/` に保存します。ターミナルには保存先だけを表示し、ログ本文は表示しません。ログの問い合わせはサーバーごとにまとめます。
 
-ファイルにも保存したい場合は次を使います。
+保存先を変更する場合は `--output-dir` を指定します。
 
 ```bash
-python3 scheduler.py logs --running --lines 200 --output-dir logs/current
+python3 scheduler.py logs --running --lines 200 --output-dir logs/checkpoint
 ```
 
-`logs/current/highway_4_30_11ded7e0.log` のように、**ジョブ名＋短い ID** のファイル名で保存します。同じジョブ名を再実行してもログが混ざらないよう、末尾に ID を付けます。名前がないジョブは `job_<ID>.log` になります。各ジョブの取得量は末尾256 KiBまでです。以前の ID だけのファイルはそのまま残します。
+標準では `logs/current/highway_4_30_11ded7e0.log` のように、**ジョブ名＋短い ID** のファイル名で保存します。同じジョブ名を再実行してもログが混ざらないよう、末尾に ID を付けます。再取得すると同じファイルを最新の末尾ログで上書きします。名前がないジョブは `job_<ID>.log` になります。各ジョブの取得量は末尾256 KiBまでです。以前の ID だけのファイルはそのまま残します。
 
 ### 空いた GPU に待機ジョブを流す
 
@@ -139,7 +139,7 @@ python3 scheduler.py logs JOB_ID --lines 200
 python3 scheduler.py info JOB_ID
 ```
 
-`info` には実行コマンド、サーバー、GPU、開始・終了時刻、Batch ID などが出ます。終了したジョブのログも取得できます。
+単一ジョブの `logs` も標準では `logs/current/` に保存します。`--output-dir` で保存先を変更できます。終了したジョブのログも取得できます。`info` には実行コマンド、サーバー、GPU、開始・終了時刻、Batch ID などが出ます。
 
 ## 3. ジョブをキャンセルする
 

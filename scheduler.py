@@ -460,7 +460,14 @@ def log_filename(job):
     return f'{name}_{job["id"][:8]}.log'
 
 
-def running_logs(cfg, queue, lines, output_dir=None):
+def save_log(job, log, output_dir):
+    output_dir.mkdir(parents=True, exist_ok=True)
+    path = output_dir / log_filename(job)
+    path.write_text(log + '\n', encoding='utf-8')
+    print(f'Saved: {path}')
+
+
+def running_logs(cfg, queue, lines, output_dir=Path('logs/current')):
     selected = [j for j in queue.all() if j.get('host') and
                 j['status'] in ('dispatching', 'reserved', 'running', 'cancelling')]
     if not selected:
@@ -470,8 +477,6 @@ def running_logs(cfg, queue, lines, output_dir=None):
     grouped = {}
     for job in selected:
         grouped.setdefault(job['host'], []).append(job)
-    if output_dir:
-        output_dir.mkdir(parents=True, exist_ok=True)
     for host, jobs in grouped.items():
         try:
             result = remote(host, dict(action='logs_batch', ids=[j['id'] for j in jobs], lines=lines))
@@ -485,11 +490,7 @@ def running_logs(cfg, queue, lines, output_dir=None):
             if not (record['status'] == 'missing' and job['status'] == 'dispatching'):
                 apply_result(updated, record)
                 queue.update_if_unchanged(job, updated)
-            print(f'\n=== {job["id"][:8]} {host} {record["status"]} '
-                  f'{job.get("name") or job["command"]} ===')
-            print(record['log'])
-            if output_dir:
-                (output_dir / log_filename(job)).write_text(record['log'] + '\n')
+            save_log(job, record['log'], output_dir)
     sync_completed(cfg, queue)
 
 
@@ -517,10 +518,11 @@ def parser():
     s = sub.add_parser('status', help='Show completion state and exit codes')
     s.add_argument('--local', action='store_true', help='Show cached state without SSH')
     s.add_argument('--dispatch', action='store_true', help='Also try queued jobs once')
-    s = sub.add_parser('logs', help='Read the remote log tail, including after completion')
+    s = sub.add_parser('logs', help='Save the remote log tail to files, including after completion')
     s.add_argument('id', nargs='?')
     s.add_argument('--running', action='store_true', help='Get logs for all active jobs')
-    s.add_argument('--output-dir', type=Path, help='Save each running job log to a file')
+    s.add_argument('--output-dir', type=Path, default=Path('logs/current'),
+                   help='Directory for log files (default: logs/current)')
     s.add_argument('--lines', type=int, default=80)
     s = sub.add_parser('info', help='Show saved command, session and results without SSH')
     s.add_argument('id')
@@ -602,14 +604,15 @@ def main():
             refresh_shared(cfg, queue)
             running_logs(cfg, queue, args.lines, args.output_dir)
         else:
-            if not args.id or args.output_dir:
-                raise ValueError('Specify a job ID, or use --running [--output-dir DIR]')
+            if not args.id:
+                raise ValueError('Specify a job ID, or use --running')
             j = queue.get(args.id)
             if not j.get('host'):
                 raise ValueError('Job has not been assigned to a host yet')
             refresh_status(queue, j['id'])
             sync_completed(cfg, queue)
-            print(remote(j['host'], {'action': 'logs', 'id': j['id'], 'lines': args.lines})['log'])
+            log = remote(j['host'], {'action': 'logs', 'id': j['id'], 'lines': args.lines})['log']
+            save_log(j, log, args.output_dir)
     elif args.action == 'info':
         j = queue.get(args.id)
         j['elapsed'] = elapsed(j)
