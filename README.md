@@ -22,7 +22,7 @@ python3 scheduler.py dispatch
 python3 scheduler.py logs --running --lines 1000
 ```
 
-**待機ジョブを進めるには `dispatch` を使います。同じ JSON を再投入すると、別のジョブが追加されます。** GPU が空いた瞬間に自動起動する仕組みではありません。この PC では cron が毎時0分に `dispatch` を実行します。
+**待機ジョブを進めるには `dispatch` を使います。同じ JSON を再投入すると、別のジョブが追加されます。** GPU が空いた瞬間に自動起動する仕組みではありません。この PC では cron が毎時0分・30分に `dispatch` を実行します。
 
 ### 登録だけする・内容を確認する
 
@@ -38,7 +38,7 @@ python3 scheduler.py submit --name highway_4_30 \
   'python3 train_transformer.py --scenario highway --method 4 --step 30'
 ```
 
-`--queue-only` でも、次の毎時実行では投入対象になります。
+`--queue-only` でも、次の定期実行では投入対象になります。
 
 ### 状態・ログ・キャンセル
 
@@ -137,14 +137,14 @@ docker cp ~/.local/share/job-scheduler/driver-libraries/580.173.02/lib \
 
 ## 自動投入（cron）
 
-この PC は `cron-dispatch.sh` を毎時0分に実行します。PC 停止中は動きません。別PCへ clone しても crontab は引き継がれず、毎時実行は起動している1台に設定すれば十分です。
+この PC は `cron-dispatch.sh` を毎時0分・30分に実行します。PC 停止中は動きません。別PCへ clone しても crontab は引き継がれず、定期実行は起動している1台に設定すれば十分です。
 
 ```bash
 crontab -l
 tail -100 ~/workspace/JobScheduler/state/cron-dispatch.log
 ```
 
-スクリプトは必要に応じて `~/.ssh/agent.env` を読み込みます。再起動後も SSH 認証できる状態にしてください。前回の毎時実行が残っている場合は重複実行しません。
+スクリプトは必要に応じて `~/.ssh/agent.env` を読み込みます。再起動後も SSH 認証できる状態にしてください。前回の定期実行が残っている場合は重複実行しません。
 
 ## 複数 PC・保存先
 

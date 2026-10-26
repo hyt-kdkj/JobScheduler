@@ -5,7 +5,7 @@
       "command": "python3 train_lstm.py --scenario {scenario} --method 1 --step {step}",
       "matrix": {
         "scenario": ["highway", "urban"],
-        "step": [30, 40, 50, 60, 70, 80]
+        "step": [10, 20, 30, 40, 50, 60, 70, 80]
       }
     }
   ]

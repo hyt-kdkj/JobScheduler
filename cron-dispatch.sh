@@ -18,11 +18,11 @@ if ! /usr/bin/flock -n 9; then
   exit 0
 fi
 
-printf '[%s] Hourly dispatch started.\n' "$(date --iso-8601=seconds)"
+printf '[%s] Scheduled dispatch started.\n' "$(date --iso-8601=seconds)"
 if /usr/bin/python3 -u "$SCRIPT_DIR/scheduler.py" dispatch; then
   dispatch_status=0
 else
   dispatch_status=$?
 fi
-printf '[%s] Hourly dispatch finished (exit=%s).\n' "$(date --iso-8601=seconds)" "$dispatch_status"
+printf '[%s] Scheduled dispatch finished (exit=%s).\n' "$(date --iso-8601=seconds)" "$dispatch_status"
 exit "$dispatch_status"
