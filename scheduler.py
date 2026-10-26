@@ -60,6 +60,13 @@ def configuration(path):
     shared = cfg.get('shared_queue')
     if shared and (not isinstance(shared, dict) or shared.get('host') not in names):
         raise ValueError('shared_queue.host must name a configured SSH host')
+    for entry in [cfg] + cfg['hosts']:
+        limit = entry.get('max_jobs_per_gpu', cfg.get('max_jobs_per_gpu', 1))
+        if not isinstance(limit, int) or isinstance(limit, bool) or limit < 1:
+            raise ValueError('max_jobs_per_gpu must be a positive integer')
+        margin = entry.get('gpu_memory_headroom_mib', cfg.get('gpu_memory_headroom_mib', 0))
+        if not isinstance(margin, (int, float)) or not math.isfinite(margin) or margin < 0:
+            raise ValueError('gpu_memory_headroom_mib must be nonnegative')
     return cfg
 
 
@@ -69,6 +76,8 @@ def host_request(cfg, host):
               ('container', 'workdir', 'idle_max_used_mib', 'idle_max_utilization')}
     if entry.get('runtime_image', cfg.get('runtime_image')):
         result['runtime_image'] = entry.get('runtime_image', cfg.get('runtime_image'))
+    for key, default in (('max_jobs_per_gpu', 1), ('gpu_memory_headroom_mib', 0)):
+        result[key] = entry.get(key, cfg.get(key, default))
     return result
 
 
@@ -94,7 +103,8 @@ def inventory(cfg):
 def candidates(cfg, inv, job):
     options = [gpu for host, data in inv.items() for gpu in data.get('gpus', [])
                if (not job.get('requested_host') or job['requested_host'] == host)
-               and gpu['idle'] and gpu['total_mib'] - gpu['used_mib'] >= job['min_free_mib']]
+               and gpu.get('accepting_jobs', gpu['idle'])
+               and gpu.get('available_mib', gpu['total_mib'] - gpu['used_mib']) >= job['min_free_mib']]
     # Stable order for equal GPU models; priority is configurable, not a benchmark.
     return sorted(options, key=lambda g: (-g['priority'], g['utilization'],
                                         -g['total_mib'] + g['used_mib'],
@@ -245,6 +255,7 @@ def dispatch(cfg, queue):
                     requeue(job)
                     queue.put(job)
                     gpu['idle'] = False
+                    gpu['accepting_jobs'] = False
                     continue
                 apply_result(job, result)
             except RuntimeError as exc:
@@ -252,6 +263,18 @@ def dispatch(cfg, queue):
                 job['connection_error'] = str(exc)
             queue.put(job)
             gpu['idle'] = False
+            gpu['accepting_jobs'] = False
+            if host_request(cfg, gpu['host'])['max_jobs_per_gpu'] > 1:
+                # Refresh server-side counts/budgets after each launch, including
+                # jobs still preparing their image and not yet visible to NVML.
+                try:
+                    data = remote(gpu['host'], dict(host_request(cfg, gpu['host']), action='probe'))
+                    for current in data['gpus']:
+                        current.update(host=gpu['host'], priority=priority(cfg, current['name']))
+                    inv[gpu['host']] = data
+                except RuntimeError as exc:
+                    # No fresh accounting: don't reuse any stale slot on this host.
+                    inv[gpu['host']] = {'error': str(exc)}
             print(f'{job["id"][:8]} {job["status"]} '
                   f'{job["host"]} GPU {gpu["index"]} {gpu["name"]}', flush=True)
             break
@@ -431,6 +454,12 @@ def cancel_jobs(cfg, queue, prefixes, batch=None):
     show_jobs([j for j in queue.all() if j['id'] in selected])
 
 
+def log_filename(job):
+    name = re.sub(r'[^\w.-]+', '_', job.get('name') or 'job')
+    name = name.encode('utf-8')[:160].decode('utf-8', errors='ignore').strip('._-') or 'job'
+    return f'{name}_{job["id"][:8]}.log'
+
+
 def running_logs(cfg, queue, lines, output_dir=None):
     selected = [j for j in queue.all() if j.get('host') and
                 j['status'] in ('dispatching', 'reserved', 'running', 'cancelling')]
@@ -460,7 +489,7 @@ def running_logs(cfg, queue, lines, output_dir=None):
                   f'{job.get("name") or job["command"]} ===')
             print(record['log'])
             if output_dir:
-                (output_dir / (job['id'] + '.log')).write_text(record['log'] + '\n')
+                (output_dir / log_filename(job)).write_text(record['log'] + '\n')
     sync_completed(cfg, queue)
 
 
@@ -546,7 +575,9 @@ def main():
                 print(f'  GPU {g["index"]} {g["name"]}: '
                       f'{g["total_mib"] - g["used_mib"]}/{g["total_mib"]} MiB free, '
                       f'{g["utilization"]}% util, priority={g["priority"]}, '
-                      f'{"IDLE" if g["idle"] else "BUSY"}'
+                      f'{"AVAILABLE" if g.get("accepting_jobs", g["idle"]) else "FULL"}, '
+                      f'slots={g.get("occupied_slots", 0)}/{g.get("max_jobs", 1)}, '
+                      f'budget={g.get("available_mib", g["total_mib"] - g["used_mib"])} MiB'
                       + (f' job={g["reserved_by"][:8]}' if g['reserved_by'] else ''))
     elif args.action == 'dispatch':
         dispatch_once(cfg, queue)

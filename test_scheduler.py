@@ -25,6 +25,8 @@ class SchedulingTest(unittest.TestCase):
         self.q = s.Queue(Path(self.temp.name))
         self.cfg = s.configuration(s.HERE / 'hosts.json')
         self.cfg.pop('shared_queue', None)
+        self.cfg['max_jobs_per_gpu'] = 1
+        self.cfg['gpu_memory_headroom_mib'] = 0
 
     def job(self):
         job = dict(id=uuid.uuid4().hex, created=time.time(), status='queued',
@@ -174,6 +176,16 @@ class SchedulingTest(unittest.TestCase):
             s.sync_completed(self.cfg, self.q)
         transfer.assert_not_called()
 
+    def test_disabled_sync_never_transfers_completed_results(self):
+        job = self.job()
+        job.update(status='succeeded', host='glockenspiel', exit_code=0)
+        self.q.put(job)
+        cfg = dict(self.cfg, results_sync=None)
+        with patch.object(s.subprocess, 'run') as transfer:
+            s.sync_completed(cfg, self.q)
+        transfer.assert_not_called()
+        self.assertNotIn('result_sync', self.q.get(job['id']))
+
     @unittest.skipUnless(shutil.which('rsync'), 'rsync required')
     def test_real_rsync_preserves_local_only_results(self):
         source = Path(self.temp.name) / 'source'
@@ -268,6 +280,28 @@ class SchedulingTest(unittest.TestCase):
         self.assertEqual(len(list(output.glob('*.log'))), 3)
         self.assertTrue(all(c.args[1]['lines'] == 200 for c in connect.call_args_list))
 
+    def test_log_files_use_job_names_and_keep_duplicate_names_distinct(self):
+        jobs = [self.job(), self.job()]
+        for job in jobs:
+            job.update(name='highway_4_30', status='running', host='glockenspiel')
+            self.q.put(job)
+        def reply(host, req):
+            return {'jobs': [dict(id=key, status='running', log='training') for key in req['ids']]}
+        output = Path(self.temp.name) / 'logs'
+        with patch.object(s, 'remote', side_effect=reply), contextlib.redirect_stdout(io.StringIO()):
+            s.running_logs(self.cfg, self.q, 200, output)
+        self.assertEqual({p.name for p in output.iterdir()},
+                         {f'highway_4_30_{job["id"][:8]}.log' for job in jobs})
+
+    def test_log_filename_handles_paths_and_long_unicode_names(self):
+        job = self.job()
+        job['name'] = '../folder/highway:4/30'
+        name = s.log_filename(job)
+        self.assertNotIn('/', name)
+        self.assertFalse(name.startswith('.'))
+        job['name'] = '学習' * 200
+        self.assertLess(len(s.log_filename(job).encode('utf-8')), 255)
+
     def test_shared_import_preserves_each_pcs_sync_state(self):
         cfg = dict(self.cfg, shared_queue={'host': 'glockenspiel'})
         job = self.job()
@@ -302,6 +336,26 @@ class SchedulingTest(unittest.TestCase):
         with patch.object(s, 'remote', return_value={'jobs': [stale]}):
             s.refresh_shared(cfg, self.q)
         self.assertEqual(self.q.get(job['id'])['status'], 'cancelled')
+
+    def test_sharing_dispatch_refreshes_slots_and_stops_at_two(self):
+        jobs = [self.job() for _ in range(3)]
+        cfg = dict(self.cfg, max_jobs_per_gpu=2)
+        gpu = self.gpu(accepting_jobs=True, occupied_slots=0, max_jobs=2,
+                       available_mib=10000)
+        inv = {'xylophone0': {'gpus': [gpu]}}
+        launches = []
+        def reply(host, req):
+            if req['action'] == 'launch':
+                launches.append(req['id'])
+                return {'status': 'reserved'}
+            count = len(launches)
+            return {'gpus': [dict(gpu, occupied_slots=count, accepting_jobs=count < 2,
+                                  available_mib=10000 - count * 2048)]}
+        with patch.object(s, 'inventory', return_value=inv), \
+             patch.object(s, 'remote', side_effect=reply), contextlib.redirect_stdout(io.StringIO()):
+            s.dispatch(cfg, self.q)
+        self.assertEqual(len(launches), 2)
+        self.assertEqual(self.q.get(jobs[-1]['id'])['status'], 'queued')
 
 
 @unittest.skipUnless(shutil.which('tmux'), 'tmux is required for lifecycle tests')
@@ -539,6 +593,55 @@ class DetachedLifecycleTest(unittest.TestCase):
                 self.ns['main'](dict(self.req, shared_queue=True, host='a', client_job=job))
         result = self.ns['main'](dict(self.req, shared_queue=True, host='b', client_job=job))
         self.assertEqual(result['redirect']['host'], 'a')
+
+    def test_sharing_admits_two_jobs_on_one_gpu_and_rejects_third(self):
+        self.req.update(command='sleep 1.5', max_jobs_per_gpu=2, gpu_memory_headroom_mib=1024)
+        a = self.ns['main'](self.req)
+        second = dict(self.req, id=uuid.uuid4().hex)
+        b = self.ns['main'](second)
+        third = dict(self.req, id=uuid.uuid4().hex)
+        self.assertEqual(a['status'], 'reserved')
+        self.assertEqual(b['status'], 'reserved')
+        self.assertEqual(self.ns['main'](third)['status'], 'busy')
+        self.assertEqual(self.wait_result()['status'], 'succeeded')
+        self.req = second
+        self.assertEqual(self.wait_result()['status'], 'succeeded')
+
+    def test_pending_gpu_memory_is_budgeted_before_cuda_starts(self):
+        self.req.update(command='sleep 0.8', max_jobs_per_gpu=2,
+                        min_free_mib=6000, gpu_memory_headroom_mib=1024)
+        self.ns['main'](self.req)
+        other = dict(self.req, id=uuid.uuid4().hex)
+        self.assertEqual(self.ns['main'](other)['status'], 'busy')
+        self.assertEqual(self.wait_result()['status'], 'succeeded')
+
+    def test_managed_gpu_process_is_not_counted_twice_and_external_is_counted(self):
+        job = dict(id=uuid.uuid4().hex, status='running', job_container='managed', min_free_mib=2048)
+        def response(args, **kwargs):
+            if args[:2] == ['docker', 'top']:
+                out = 'PID\n111\n'
+            elif '--query-compute-apps=' in args[-1]:
+                out = 'GPU-test, 111, 1024\nGPU-test, 222, 1024\n'
+            else:
+                out = '0, GPU-test, GTX 1080 Ti, 11264, 2048, 90\n'
+            return subprocess.CompletedProcess(args, 0, out, '')
+        request = dict(self.req, max_jobs_per_gpu=2, gpu_memory_headroom_mib=1024)
+        with patch.dict(self.ns, run=response, reservations=lambda: {'GPU-test': [job]}):
+            gpu = self.ns['probe'](request)['gpus'][0]
+        self.assertEqual(gpu['occupied_slots'], 2)
+        self.assertEqual(gpu['external_processes'], 1)
+        self.assertEqual(gpu['pending_mib'], 1024)
+        self.assertFalse(gpu['accepting_jobs'])
+        # The same managed process alone is one slot, despite high utilization.
+        def managed_only(args, **kwargs):
+            result = response(args, **kwargs)
+            if '--query-compute-apps=' in args[-1]:
+                result.stdout = 'GPU-test, 111, 1024\n'
+            return result
+        with patch.dict(self.ns, run=managed_only, reservations=lambda: {'GPU-test': [job]}):
+            gpu = self.ns['probe'](request)['gpus'][0]
+        self.assertEqual(gpu['occupied_slots'], 1)
+        self.assertTrue(gpu['accepting_jobs'])
 
 
 if __name__ == '__main__':

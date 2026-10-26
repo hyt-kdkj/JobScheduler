@@ -38,6 +38,14 @@ def main():
             return 1
         print(json.dumps([info]))
         return 0
+    if action == 'top':
+        path = containers / args[0]
+        if not path.exists():
+            print('error: no such container', file=sys.stderr)
+            return 1
+        print('PID')
+        print(json.loads(path.read_text())['pid'])
+        return 0
     if action in ('stop', 'rm'):
         path = containers / args[-1]
         if not path.exists():

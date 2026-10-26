@@ -1,365 +1,372 @@
 # JobScheduler
 
-ローカルでコマンドを登録し、SSH 先の空いている GPU を選んで、ジョブ専用の Docker コンテナ内で実行するツール。Python 標準ライブラリだけで動作する。
+ローカル PC から学習コマンドを登録し、SSH 先の GPU で実行するツールです。性能の高い GPU を優先し、**同じ GPU に最大2ジョブ**を割り当てます。ジョブごとにコンテナを作成して、終了後に削除します。
 
-**SSH 接続はコマンド実行時だけ。ローカルの常駐監視や定期ポーリング、SSH 接続の維持は行わない。** 投入後のジョブはサーバーごとに1つの専用 tmux セッション内のウィンドウで動くため、ローカルのコマンドが終了した後や、ローカル PC を閉じた後も実行を続ける。
+**SSH 接続はコマンドを実行した時だけです。常時接続はしません。** この PC は cron で毎時0分にも `dispatch` を実行します。空き GPU がなかったジョブは、次の手動操作または cron 実行時に再判定します。
 
-## 準備
+## 最初に：待機ジョブは dispatch の実行時に始まります
 
-ローカルには Python 3.9 以降、`ssh`、`rsync` が必要。対象ホストには Python 3.9 以降、tmux、Docker、および起動済みの実行用コンテナが必要。結果の取得元 glockenspiel にも `rsync` が必要。
-
-`hosts.json` は次の SSH エイリアスを使用する。ローカルの `~/.ssh/config` と SSH 鍵の設定を利用し、パスワード入力が必要な接続はエラーとしてスキップする。
-
-- `glockenspiel`
-- `marimba`
-- `xylophone0`
-- `xylophone1`
-- `xylophone3`
-
-既定のテンプレート用コンテナ名は `v2vsimulator-v2v-dev-1`、作業ディレクトリは `/workspace/V2VSimulator/Simulator`。テンプレートは GPU 情報の取得と、ジョブ専用コンテナの環境のひな型に使う。テンプレート自体は起動・停止・再作成しない。ジョブは SSH ユーザーの UID/GID で実行する。
-
-初回は準備済みテンプレートを `docker commit --pause=false` でキャッシュイメージに保存し、以後ジョブごとに `docker run --rm --init` で新しいコンテナを作る。テンプレートの仮想環境・環境変数と GPU デバイス、SAN のマウントを引き継ぐ。ジョブ終了後は専用コンテナを削除する。キャッシュ作成中も既存コンテナを一時停止しない。
-
-初回のキャッシュ作成は環境サイズによって数分以上かかる。作成待ちはサーバー側のワーカーが行い、投入元の SSH を維持する必要はない。準備のメッセージも `logs` で確認できる。キャッシュ作成の上限は30分。
-
-## 基本操作
-
-以下はすべてローカルの `JobScheduler/` で実行する。
+**`queued` に入ったジョブは、GPU が空いた瞬間には始まりません。** この PC では毎時0分に cron が `dispatch` を実行するので、その時に空き枠へ投入します。次の時刻を待たずに進めたい場合は、手動で次を実行します。
 
 ```bash
-cd /home/hayate-desktop/workspace/JobScheduler
-
-# 各ホストの GPU・空きメモリ・使用状況を一度だけ取得
-python3 scheduler.py gpus
-
-# コマンドを登録し、その場で空き GPU への投入を試みる
-python3 scheduler.py submit --name highway1192 \
-  'python3 train_transformer.py  --method 1 --scenario highway'
-
-# リモートに一度接続して、実行中・成功・失敗を確認
-python3 scheduler.py status
-
-# ログの末尾を取得。ID は表示された先頭8文字などで指定できる
-python3 scheduler.py logs 1234abcd --lines 200
-
-# 実行中ジョブのログを一括取得。ログの問い合わせはサーバーごとにまとめる
-python3 scheduler.py logs --running --lines 200
-
-# ジョブ別のログファイルとして保存する場合
-python3 scheduler.py logs --running --lines 200 --output-dir logs/current
-
-# 実行コマンド、ホスト、GPU UUID、終了コード、時刻などを表示（SSH 接続なし）
-python3 scheduler.py info 1234abcd
-```
-
-コマンド全体をシングルクォートで囲む。環境変数を指定する場合も、コマンドの中に書ける。
-
-`logs --running` は共有キューを取得して対象を選び、各サーバーに一度ずつログを問い合わせる。実行中・起動準備中・停止要求中のジョブをまとめて表示し、見出しでジョブ ID とホストを区別する。`--output-dir` 指定時は全 ID をファイル名にした `.log` に保存する。取得中に完了が判明したジョブも最後のログを表示して状態を更新する。各ジョブのログ取得量は末尾256 KiBまで。
-
-```bash
-python3 scheduler.py submit --min-free-gb 8 --name evaluation \
-  'V2V_SAVE_RESULTS_DIR=save_results/unique-evaluation python3 your_evaluation.py ...'
-```
-
-`your_evaluation.py ...` は実際の評価コマンドに置き換える。コマンド中の `$変数` はリモートのコンテナ内で展開される。Python のコマンドはコンテナの既存 PATH、仮想環境を利用する。
-
-## 空き GPU がないとき
-
-ジョブはローカルのキューに `queued` として残る。**GPU が後から空いても、自動では開始しない。** 次のいずれかを実行した時に再判定する。
-
-```bash
-# 待機ジョブをもう一度投入する。終了状態も更新する
 python3 scheduler.py dispatch
+```
 
-# 状態確認と待機ジョブの投入を一度に行う
+| やりたいこと | 実行するコマンド | 待機ジョブを開始する？ |
+|---|---|---|
+| 状態を見るだけ | `python3 scheduler.py status` | いいえ |
+| 待機ジョブを進める | `python3 scheduler.py dispatch` | はい。実行枠と VRAM に余裕があれば開始 |
+| 状態確認と投入をまとめる | `python3 scheduler.py status --dispatch` | はい |
+| 実行中のログを見るだけ | `python3 scheduler.py logs --running --lines 200` | いいえ |
+
+`dispatch` はサブコマンド、`--dispatch` は `status` に付けるオプションです。`--dispach` という指定はありません。
+
+例えば、5件が実行中、7件が `queued` の時に1件が終わると、4件実行中・7件待機になります。次の毎時0分、または手動の `dispatch` 実行時に、その時の空き枠へ待機ジョブが入ります。
+
+新しい `submit` / `submit-batch` を実行した時も、登録済みの待機ジョブを含めて投入を試みます。**待機ジョブを進める目的で同じ JSON を再投入すると、重複した新規ジョブが増えるため、`dispatch` を使ってください。**
+
+### この PC の毎時実行（cron）
+
+この PC の crontab に、**毎時0分に1回** `cron-dispatch.sh` を実行する設定を登録しています。実行中は SSH 接続し、処理が終わると切断します。PC が停止している間は動きません。
+
+```bash
+# 登録内容を確認
+crontab -l
+
+# 毎時の投入結果を確認
+tail -100 ~/workspace/JobScheduler/state/cron-dispatch.log
+```
+
+スクリプトは `~/.ssh/agent.env` から既存 SSH エージェントの設定を読み込みます。再起動後など、SSH 鍵をまだ利用できない状態では接続に失敗するので、普段の SSH 認証ができる状態にしてください。前の毎時実行が残っていれば、新しい実行は重ねずスキップします。
+
+crontab はこの PC の OS 設定です。GitHub から別 PC に clone しても自動登録はされません。複数 PC で使う場合も、毎時実行は常時起動している1台に設定すれば十分です。
+
+## 1. 今回の12件の学習を投入する
+
+以下はすべて**ローカル PC**で実行します。
+
+```bash
+cd ~/workspace/JobScheduler
+```
+
+12件の学習用サンプルは [jobs/transformer_method4_highway_urban_steps30_80.json](jobs/transformer_method4_highway_urban_steps30_80.json) です。
+
+| 項目 | 内容 |
+|---|---|
+| 学習スクリプト | `train_transformer.py` |
+| シナリオ | `highway`、`urban` |
+| method | `4` |
+| step | `30, 40, 50, 60, 70, 80` |
+| ジョブ数 | 2シナリオ × 6種類のstep = **12件** |
+| ジョブ名 | `highway_4_30`、`urban_4_80` など |
+
+まず、実行されるコマンドを確認します。この段階では登録も SSH 接続も行いません。
+
+```bash
+python3 scheduler.py submit-batch jobs/transformer_method4_highway_urban_steps30_80.json --dry-run
+```
+
+内容を確認したら、次のコマンドを**一度だけ**実行します。
+
+```bash
+python3 scheduler.py submit-batch jobs/transformer_method4_highway_urban_steps30_80.json
+```
+
+`Batch ...: 12 jobs` と表示され、GPU の実行枠と VRAM に余裕がある分だけ開始します。1 GPU 最大2ジョブです。残りが `queued` になるのは正常です。
+
+**既にこの12件を投入済みなら、同じ `submit-batch` を再実行しないでください。再実行すると別の12件が追加されます。** 待機中のジョブを進めるには、次の節の `dispatch` を使います。
+
+## 2. 投入後に使うコマンド
+
+### 終わったか確認する
+
+```bash
+python3 scheduler.py status
+```
+
+他の PC から投入したジョブも SAN から取り込んで表示します。`ELAPSED` は待機時間を含まない実行時間です。
+
+| STATE | 意味 |
+|---|---|
+| `queued` | GPU の空き待ち |
+| `reserved` | GPU を確保済み、起動準備中 |
+| `running` | 学習中。初回の環境イメージ準備中も含む |
+| `succeeded` | 正常終了。`EXIT` は `0` |
+| `failed` | 実行失敗。`EXIT` とログを確認する |
+| `cancelling` | 停止要求済み、停止完了待ち |
+| `cancelled` | 取り消し、または停止済み |
+| `dispatching` | 投入処理中、または投入応答の確認待ち |
+| `unknown` | 状態が確定できない。実行が残っていないか調べる |
+
+通信失敗だけで学習を失敗扱いにはしません。`connection_error` が出たら、後で `status` を再実行してください。
+
+### 実行中のログをまとめて見る
+
+```bash
+python3 scheduler.py logs --running --lines 200
+```
+
+実行中・起動準備中・停止要求中の各ジョブについて、末尾200行をまとめて表示します。見出しにはジョブ ID、サーバー、状態、ジョブ名が出ます。ログの問い合わせはサーバーごとにまとめます。
+
+ファイルにも保存したい場合は次を使います。
+
+```bash
+python3 scheduler.py logs --running --lines 200 --output-dir logs/current
+```
+
+`logs/current/highway_4_30_11ded7e0.log` のように、**ジョブ名＋短い ID** のファイル名で保存します。同じジョブ名を再実行してもログが混ざらないよう、末尾に ID を付けます。名前がないジョブは `job_<ID>.log` になります。各ジョブの取得量は末尾256 KiBまでです。以前の ID だけのファイルはそのまま残します。
+
+### 空いた GPU に待機ジョブを流す
+
+```bash
+python3 scheduler.py dispatch
+```
+
+終了状態を更新し、その時点で空いている GPU に待機ジョブを投入して切断します。手動で実行しなくても、この PC では次の毎時0分に同じ処理が走ります。
+
+状態確認と投入をまとめて行う場合はこちらです。
+
+```bash
 python3 scheduler.py status --dispatch
 ```
 
-新しい `submit` を実行した時も、先に登録された待機ジョブから投入を試みる。必要なメモリや指定ホストが合わないジョブは残し、実行可能な後続ジョブを進める。
+### 特定のジョブのログ・詳細を見る
 
-定期接続をしない設計なので、`watch`、cron、バックグラウンド監視などは設定しない。
-
-## ジョブの一括投入
-
-JSON ファイルにジョブを記載し、`submit-batch` でまとめて登録する。
+次の `JOB_ID` は、`status` の左端の ID に置き換えます。先頭8文字でも指定できます。`highway_4_30` のようなジョブ名ではなく、ID を指定してください。
 
 ```bash
-# 展開後のコマンドを確認。登録も SSH 接続も行わない
-python3 scheduler.py submit-batch examples/seeds.json --dry-run
-
-# 登録し、その場で一度だけ空き GPU への投入を試みる
-python3 scheduler.py submit-batch examples/seeds.json
-
-# 登録だけ行う
-python3 scheduler.py submit-batch examples/seeds.json --queue-only
+python3 scheduler.py logs JOB_ID --lines 200
+python3 scheduler.py info JOB_ID
 ```
 
-`examples/seeds.json` は車両数2通り × seed 3通りの6ジョブを生成する。サンプルのコマンドは条件と割り当て GPU を表示する動作確認用なので、実験用のコマンドへ置き換える。`matrix` の各キーについて、`command` と `name` の `{変数名}` を置き換える。組合せはすべて展開する。テンプレートの値はシェルコマンドへそのまま挿入するので、seed や車両数などの数値を指定するのが簡単。
+`info` には実行コマンド、サーバー、GPU、開始・終了時刻、Batch ID などが出ます。終了したジョブのログも取得できます。
 
-異なるコマンドを列挙する形式にも対応する。
+## 3. ジョブをキャンセルする
+
+ここでも `JOB_ID` / `BATCH_ID` は実際の ID に置き換えます。
+
+```bash
+# 1件をキャンセル
+python3 scheduler.py cancel JOB_ID
+
+# 一括投入した12件をまとめてキャンセル
+python3 scheduler.py cancel --batch BATCH_ID
+
+# 停止が完了したか確認
+python3 scheduler.py status
+```
+
+Batch ID は一括投入時の `Batch ...` の値です。各ジョブの `info` の `batch_id` でも確認できます。
+
+待機ジョブは取り消し、実行中のジョブはそのジョブ専用のコンテナだけを停止します。テンプレート用コンテナや他のジョブは停止しません。停止と削除の確認後に `cancelled` となり、GPU の予約を解放します。
+
+SSH の応答が失われた場合も停止要求を記録し、次の `status` や `dispatch` で再確認します。`unknown` のジョブや古い形式のジョブは、自動停止できない場合があります。
+
+## 4. 新しいジョブ定義を作る
+
+今回の JSON は次の形式です。`matrix` の組合せごとに、`name` と `command` の変数を置き換えます。
+
+```json
+{
+  "jobs": [
+    {
+      "name": "{scenario}_4_{step}",
+      "command": "python3 train_transformer.py --scenario {scenario} --method 4 --step {step}",
+      "matrix": {
+        "scenario": ["highway", "urban"],
+        "step": [30, 40, 50, 60, 70, 80]
+      }
+    }
+  ]
+}
+```
+
+例えば先頭は次の1ジョブに展開されます。
+
+```text
+名前: highway_4_30
+実行: python3 train_transformer.py --scenario highway --method 4 --step 30
+```
+
+条件の異なるコマンドを `jobs` に複数並べても構いません。`host` で実行先を限定し、`min_free_gb` で必要な空き VRAM を GiB 単位で指定できます。`defaults` は全ジョブ共通の省略値です。
 
 ```json
 {
   "defaults": {"min_free_gb": 4},
   "jobs": [
     {
-      "name": "method1-seed42",
-      "command": "python3 train_transformer.py --scenario highway --method 1 --seed 42"
+      "name": "highway_4_30",
+      "command": "python3 train_transformer.py --scenario highway --method 4 --step 30",
+      "host": "glockenspiel"
     },
     {
-      "name": "method2-seed43",
-      "command": "python3 train_transformer.py --scenario highway --method 2 --seed 43",
-      "host": "glockenspiel",
-      "min_free_gb": 8
+      "name": "urban_4_40",
+      "command": "python3 train_transformer.py --scenario urban --method 4 --step 40"
     }
   ]
 }
 ```
 
-`defaults` は各ジョブの省略値。ジョブ側の指定が優先される。全件を検証してから一度のトランザクションで登録するため、不正なジョブがあれば一部だけが登録されることはない。上限は1回10000ジョブ。表示された Batch ID と元ファイルのパスは各ジョブの `info` にも保存する。
+新しいファイル名で `jobs/` に保存し、`submit-batch ... --dry-run` で確認してから投入します。全件を検証してから登録し、1回の上限は10000件です。文字列の行列値はコマンドにそのまま挿入するため、引用符が必要な値には注意してください。
 
-空き GPU の数だけ開始し、残りは `queued` になる。自動で順次投入する監視は行わないため、後続を進める時は `dispatch` または `status --dispatch` を実行する。
-
-V2VSimulator の学習モデル名には seed が含まれないため、同じ条件で seed だけを変えた学習は保存先が重なる。学習を並列化する場合は別の配置・コンテナを設定するなど、モデルと結果の保存先も分ける。スケジューラの `name` は表示用で、シミュレータの保存先は変更しない。
-
-## ジョブのキャンセル
+1件だけなら JSON は不要です。
 
 ```bash
-# ジョブ ID を指定。複数指定も可能
-python3 scheduler.py cancel 1234abcd
-python3 scheduler.py cancel 1234abcd 5678efab
-
-# 一括投入したバッチ全体をキャンセル（Batch ID の先頭部分でも可）
-python3 scheduler.py cancel --batch abcdef12
-
-# 実行中だったジョブの停止完了を確認
-python3 scheduler.py status
+python3 scheduler.py submit --name highway_4_30 \
+  'python3 train_transformer.py --scenario highway --method 4 --step 30'
 ```
 
-ローカルだけに登録した待機ジョブは SSH 接続せず `cancelled` にする。SAN に公開済みの待機ジョブは、共有キューのロックを取ってキャンセルする。実行中のジョブは `cancelling` と表示し、専用ワーカーがそのジョブ専用コンテナを `docker stop` で停止する。停止後に専用コンテナとウィンドウを削除する。テンプレート用コンテナや他のジョブは停止しない。
+`name` はスケジューラの表示名で、モデルの保存先は変更しません。同じ条件の学習を重ねる場合は、出力先が競合しないことを確認してください。全サーバーでファイルが共有されるので、別サーバーでも同じパスへの書込みは競合します。
 
-停止とコンテナの削除を確認したら `cancelled` に変わり、GPU の予約を解放する。停止に伴う終了コードは通常143または137。キャンセルの要求と自然終了が重なった場合は、実際の終了状態が優先される。既に終了したジョブへ再度キャンセルしても再実行や状態変更は行わない。
+## 5. 最初に必要な準備
 
-SSH の応答が失われた場合もキャンセルの意図を保存し、次の `status` または `dispatch` で同じジョブへ再要求する。キャンセル処理のための定期 SSH 接続は行わない。実行済みジョブの途中結果も、停止確認後に通常の結果同期の対象になる。実行していない待機ジョブのキャンセルでは結果同期を行わない。
+### ローカル PC
 
-この機能の追加前に投入した実行中ジョブと、ワーカーが消失して `unknown` になったジョブは、自動停止できない場合がある。その場合はエラーを表示し、停止したとは扱わない。
+Python 3.9 以降と `ssh` が必要です。この `JobScheduler/` を配置し、次の SSH エイリアスでパスワード入力なしに接続できるようにします。
 
-## GPU の選択
+```text
+glockenspiel
+marimba
+xylophone0
+xylophone1
+xylophone3
+```
 
-1ジョブにつき GPU 1台を割り当てる。空いている GPU の中から、`hosts.json` の優先度が高いものを選ぶ。値が大きいほど優先される。
+### サーバーと SAN
 
-| GPU 名の一致文字列 | 優先度 |
+V2VSimulator 本体は SAN 上の `~/workspace/V2VSimulator` に置きます。同じ SAN を参照するため、サーバーごとに別々に clone する必要はありません。ローカルの V2VSimulator の自動転送や、リモートでの自動 Git pull は行いません。
+
+Docker・NVIDIA ドライバ・tmux・Python 3.9 以降は、使用する各サーバーに必要です。Docker のイメージやコンテナはホストごとに準備します。例えば glockenspiel の初回準備は次のとおりです。
+
+```bash
+# ローカル PC で実行
+ssh glockenspiel
+
+# SSH 先で実行
+cd ~/workspace/V2VSimulator
+./docker-shell.sh start
+exit
+```
+
+同様の準備を使用する他のサーバーでも行います。既定のテンプレート名は `v2vsimulator-v2v-dev-1`、コンテナ内の作業ディレクトリは `/workspace/V2VSimulator/Simulator` です。必要なら `hosts.json` で変更します。
+
+GPU が使えるかを、ローカルから確認します。
+
+```bash
+python3 scheduler.py gpus
+```
+
+`UNAVAILABLE` のサーバーはスキップします。ジョブ全体が失敗したという意味ではありません。
+
+## 6. GPU の選択とドライバ不一致
+
+空いている GPU の中では、次の順で優先します。優先度は `hosts.json` で変更できます。
+
+| GPU | 優先度 |
 |---|---:|
 | RTX 5000 Ada | 100 |
 | Quadro RTX 6000 | 60 |
 | GTX 1080 Ti | 40 |
 | P100 | 30 |
 
-これは既定の優先順位であり、実測速度ではない。未登録の GPU は優先度 0 になるので、GPU を追加した場合は設定を更新する。
+1ジョブにつき1台を割り当て、**1 GPU あたり最大2ジョブ**まで共有します。実行中だけでなく、GPU を予約してイメージを準備中のジョブも1枠と数えます。スケジューラ外の GPU 計算プロセスも各1枠として数え、管理中ジョブのプロセスと二重には数えません。
 
-既定では、次の条件をすべて満たした GPU を空きと判断する。
+共有モードでは GPU 使用率が高いだけでは除外しません。必要な VRAM が残っていることを確認し、さらに既定で1 GiBの余裕を残します。起動直後で CUDA がメモリを使い始めていないジョブも、必要 VRAM の予算を確保して判定します。必要 VRAM の既定値は1ジョブ2 GiBで、JSON の `min_free_gb` で変更できます。これは投入判断用の見積もりで、実行中のメモリ使用量を制限する設定ではありません。
 
-- このツールからの別ジョブの予約がない。
-- `nvidia-smi` に計算プロセスが表示されていない。
-- 使用中の GPU メモリが 512 MiB 以下。
-- GPU 使用率が 10% 以下。
-- ジョブに指定した必要空きメモリを満たす。既定は 2 GiB。
-
-```bash
-# 最低 8 GiB の空きを要求
-python3 scheduler.py submit --min-free-gb 8 'python3 ...'
-
-# 特定ホストだけを使う
-python3 scheduler.py submit --host glockenspiel 'python3 ...'
-```
-
-`--min-free-gb` は投入時の条件であり、メモリ予約や上限設定ではない。VRAM 消費の見積もりに合わせて指定する。
-
-GPU は番号ではなく UUID を使い、コンテナ内の `CUDA_VISIBLE_DEVICES` に設定する。**ジョブ側は既存の `CUDA_VISIBLE_DEVICES` を尊重する必要がある。** V2VSimulator では `--gpu` を省略するか `--gpu auto` を使い、`--gpu all` や物理 GPU 番号の明示で割当てを上書きしない。
-
-別のツールや手作業の GPU 利用者は、このスケジューラの予約を共有しない。投入直前にも再確認するが、外部ジョブとの同時開始を完全には防げない。
-
-## LD_LIBRARY_PATH の自動設定
-
-サーバーで稼働中の NVIDIA カーネルモジュールの版を読み、その版に一致する次のディレクトリがコンテナ内に存在すれば、ジョブと GPU 状態取得の両方で自動的に優先する。
-
-```text
-/opt/nvidia-driver-<稼働中の版>/lib
-```
-
-例えば `580.173.02` なら、プロセス内で次と同等の設定をする。
-
-```bash
-export LD_LIBRARY_PATH=/opt/nvidia-driver-580.173.02/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}
-```
-
-手動での export や tmux ウィンドウごとの設定は不要。既存の環境やコンテナの設定は変更しない。対応ライブラリがなければ既存環境を使い、GPU を認識できなければそのホストをスキップする。ドライバ自体のインストールは行わない。
-
-作成時の確認では xylophone0 は対応ライブラリで認識できた。marimba と xylophone1 はドライバ不一致、xylophone3 は NVIDIA ドライバ／コンテナへの GPU 提供が未整備だったため、利用するには別途環境の復旧が必要。
-
-## 終了と進捗の確認
-
-```bash
-python3 scheduler.py status
-python3 scheduler.py logs 1234abcd
-```
-
-| 状態 | 意味 |
-|---|---|
-| `queued` | ローカルで待機中 |
-| `dispatching` | 投入要求中、または応答が不明。次の `dispatch` で同じ ID に対して再確認・再要求する |
-| `reserved` | リモートで GPU を確保済み |
-| `running` | コンテナ内でコマンドを実行中 |
-| `cancelling` | 停止要求済み。GPU の予約はまだ保持している |
-| `succeeded` | 終了コード 0 で終了 |
-| `failed` | 非ゼロの終了コード、または起動時のエラー |
-| `cancelled` | 待機中に取り消し、または実行中ジョブの停止を確認済み |
-| `unknown` | tmux 消失などにより確認できない。自動再投入しない |
-
-`EXIT` 列で終了コードを確認できる。パイプラインも `pipefail` を有効にして実行するため、`python ... | tee ...` の Python 側が失敗した場合も失敗として記録する。実行中の進み具合は、コマンドが出力するログで確認する。共通の進捗率は計算しない。
-
-`ELAPSED` 列は実行時間を `時:分:秒` で表示する。実行中は確認時点までの経過時間、終了後は開始から終了までの所要時間。待機時間は含めず、未開始なら `-` を表示する。`info` では `elapsed` と `elapsed_seconds` も確認できる。`status --local` では最後に取得した終了状態を使うため、実際には終了していても、終了を取得するまでは実行中として時間を表示する。
-
-SSH 接続に失敗しただけではジョブを `failed` にしない。最後の状態と `connection_error` を表示するので、後から `status` を再実行する。失敗したジョブは自動再実行しない。
-
-### 終了確認時の結果の自動同期
-
-`status`、`logs`、`dispatch`、通常の `submit` / `submit-batch` で、実行済みかつ終了済み（`succeeded`、`failed`、`cancelled`）の未同期ジョブが見つかったら、次と同等の rsync を自動実行する。失敗・キャンセルしたジョブの途中結果も取得する。
-
-```bash
-rsync -az glockenspiel:~/workspace/V2VSimulator/Simulator/save_results/ \
-  ~/workspace/V2VSimulator/Simulator/save_results/
-```
-
-**同期するのは終了を確認するコマンドを実行した時。ジョブ終了の瞬間にバックグラウンド接続は行わない。** ローカル PC を閉じていた場合も、次の `status` で同期できる。
-
-複数のジョブの終了が同時に判明した場合、rsync は1回にまとめる。成功したジョブは同期済みとして記録し、以後同じ終了に対して再実行しない。同期に失敗した場合は、次の確認・投入操作で再試行する。ジョブ本体の終了状態は変更しない。
-
-`status` の `SYNC` 列に同期の `succeeded` / `failed` を表示する。詳細な同期エラーや同期時刻・保存先は `info <ID>` でも確認できる。`status --local`、`info`、`submit --queue-only` は接続も同期も行わない。
-
-`-az` に従い、取得元で変更された同名ファイルは更新し、ローカルにしかないファイルは削除しない。取得範囲はジョブ別ではなく `save_results/` 全体なので、他の実行中ジョブの途中結果も含まれる場合がある。
-
-glockenspiel・marimba・xylophone は SAN で同じファイルを共有しているため、取得元は実行ホストにかかわらず glockenspiel 固定にする。全ホストで同じ結果ディレクトリを参照している。
-
-設定は `hosts.json` の `results_sync` で変更できる。ローカルパスの `~` は、操作しているユーザーのホームに展開する。rsync の SSH 接続も接続共有・接続維持を無効にする。
+`gpus` の `slots=1/2` は1枠使用中、`slots=2/2` は上限です。`budget` は起動待ちジョブの予算と余裕分を差し引いた追加投入用の VRAM です。
 
 ```json
-"results_sync": {
-  "source": "glockenspiel:~/workspace/V2VSimulator/Simulator/save_results/",
-  "destination": "~/workspace/V2VSimulator/Simulator/save_results/",
-  "timeout_seconds": 1800
-}
+"max_jobs_per_gpu": 2,
+"gpu_memory_headroom_mib": 1024
 ```
 
-`results_sync` を削除するか `null` にすると自動同期を無効にできる。
+設定は `hosts.json` でホストごとにも上書きできます。`max_jobs_per_gpu` を1にすると従来の専有方式に戻り、計算プロセスなし・使用メモリ512 MiB以下・使用率10%以下の条件も適用します。状態不明の予約がある GPU は、安全に再確認できるまで追加投入しません。
 
-`unknown` の場合はコンテナ内に処理が残っている可能性があるので、実行状態を調べてから再投入する。安全のため予約も自動解放しない。管理用ファイルは下記のリモート保存先にある。
+割当ては GPU UUID を `CUDA_VISIBLE_DEVICES` に設定して行います。V2VSimulator の `--gpu` は省略するか `--gpu auto` とし、ジョブ側で割当てを上書きしないでください。手作業で起動した外部ジョブはこの予約を共有しないため、外部利用者との同時開始を完全には防げません。
 
-`status`、`logs` はそれぞれ一回限りの問い合わせ。`wait` や常駐監視のコマンドは用意していない。
+ドライバの版が食い違う場合は、稼働中の NVIDIA カーネルモジュールと同じ版のライブラリをコンテナ内に用意する方法があります。
 
-## SSH 接続を行わない操作
-
-```bash
-# その場では投入せず、ローカルに登録だけする
-python3 scheduler.py submit --queue-only 'python3 ...'
-
-# 最後に取得した状態だけを見る
-python3 scheduler.py status --local
-
-# 保存された詳細を確認
-python3 scheduler.py info 1234abcd
+```text
+/opt/nvidia-driver-580.173.02/lib
 ```
 
-## 保存先と tmux
+対応するディレクトリがあれば、スケジューラが `LD_LIBRARY_PATH` を自動設定します。tmux の各ウィンドウで export する必要はありません。ライブラリはテンプレートから新しい環境イメージにも引き継ぎます。ホストのカーネルドライバ自体が動いていない場合は、この方法だけでは GPU を使えません。
 
-- ローカルのキャッシュ・未公開キュー：`JobScheduler/state/queue.sqlite3`
-- SAN 上の共有キュー：`~/.local/state/job-scheduler/shared/`
-- リモートのログ・要求・終了状態：`~/.local/state/job-scheduler/<hostname>/<ジョブの全ID>/`
-- リモート tmux：専用ソケット `job-scheduler`、セッション `jobs`、ジョブ別ウィンドウ
-- ジョブ専用コンテナ：`job-scheduler-<ジョブの全ID>`
-- シミュレータのモデル・結果：既存コンテナの作業ディレクトリに従う。`save_results/` は終了確認時にローカルへ同期する。モデルは同期対象に含めない。
-
-コンテナはジョブごとに作成する。成功・失敗・キャンセル時は `--rm` とラベル検証付きの後片付けで、そのジョブのコンテナを削除してから終了状態を保存する。削除できなければ `unknown` と `cleanup_error` を表示し、GPU の予約を自動解放しない。
-
-スケジューラ用の tmux セッションは各サーバーに1つ。`overview` ウィンドウを次回の投入用に残し、ジョブごとにウィンドウを追加する。成功・失敗・キャンセル後はそのウィンドウだけを閉じる。ジョブがなくなってもセッション数は1つのままで、SSH 接続は残らない。既存の対話用 tmux とは別のソケットを使い、そちらのセッションには触れない。
-
-手動で画面を見たい場合は、対象サーバーに入って `tmux -L job-scheduler attach -t jobs` で接続できる。通常は `logs --running` でまとめてログを取得できる。終了済みジョブのログは tmux のウィンドウが閉じた後も取得できる。
-
-ジョブのコンテナ内だけに書き込んだファイルはコンテナ削除時に消えるため、結果は SAN のマウント先へ保存する。キャッシュイメージはテンプレートのコンテナ ID ごとに1つ保持する。ジョブごとにイメージは作らない。結果・ログ・実行履歴と、リモートの要求・ワーカーファイルは保存するので、ディスク上の履歴は増える。ホスト停止や強制終了で `unknown` になった場合は状態を調べてから対処する。
-
-ローカルの接続は ControlMaster / ControlPersist を無効にしており、接続共有のために SSH を残さない。リモートのワーカーから SSH で折り返すこともない。
-
-同じ SSH ユーザーのジョブ間は、リモートのホスト別予約とファイルロックで GPU の重複割当てを防ぐ。SSH の応答が途中で失われても、同じジョブ ID の再要求で二重実行しない。
-
-## 複数 PC で使う
-
-同じ SSH ユーザーで同じ SAN にアクセスする PC 間では、待機キュー・ジョブ情報・ログを共有できる。各 PC にこのツールを配置し、同じ `hosts.json` と接続先の SSH エイリアスを設定する。
+現在、xylophone0・marimba・xylophone1 のテンプレートに `580.173.02` 用ライブラリを配置済みです。SAN の `~/.local/share/job-scheduler/driver-libraries/580.173.02/lib/` にも保存しています。テンプレートを作り直した場合、稼働中の版が引き続き `580.173.02` なら、対象サーバーで次を実行すると再配置できます。
 
 ```bash
-# 別の PC で投入されたジョブも取り込んで確認
-python3 scheduler.py status
-
-# 別 PC のジョブのログ確認とキャンセル
-python3 scheduler.py logs --running --lines 200
-python3 scheduler.py cancel <ジョブID>
+docker exec --user 0 v2vsimulator-v2v-dev-1 mkdir -p /opt/nvidia-driver-580.173.02
+docker cp ~/.local/share/job-scheduler/driver-libraries/580.173.02/lib \
+  v2vsimulator-v2v-dev-1:/opt/nvidia-driver-580.173.02/
 ```
 
-通常の投入ではジョブを SAN の共有キューへ公開し、投入先の割当ても SAN のロックで管理する。複数 PC が同時に `dispatch` しても、同じジョブを異なるサーバーで二重実行しない。`status` / `logs --running` は共有キューを取得し、他 PC の待機・実行・終了済みジョブも取り込む。
+既に作成済みの環境イメージにも変更を反映したい場合は、次の節に従ってキャッシュを更新します。xylophone3 はホスト側の NVIDIA ドライバが認識されていないため、別途ホスト環境の整備が必要です。
 
-`shared_queue.host` の glockenspiel を問い合わせ先にし、接続できなければ他の設定済みサーバーへ切り替える。いずれも同じ SAN の共有キューを参照する。キューの読み書きはコマンド実行時だけで、常時接続は行わない。
+## 7. コンテナ・tmux・結果の扱い
 
-`--queue-only` はその PC 内への登録のみ。次にその PC で `dispatch` するまで SAN に公開されない。`status --local` と `info` はその PC の最後に取得した情報を表示する。結果の rsync 済みフラグは PC ごとに保持するため、片方で同期済みでも、もう片方ではその PC へ取得できる。
+- テンプレート用コンテナは変更・停止せず、準備済み環境のひな型として使います。
+- 初回に `docker commit --pause=false` で環境イメージを保存し、以後は再利用します。大きな環境では初回に数分以上かかります。準備ログも取得でき、準備待ちのために SSH を維持する必要はありません。作成の上限は30分です。
+- ジョブは `docker run --rm --init` で新しいコンテナを作り、終了・失敗・キャンセル後に削除します。削除対象はジョブラベルで検証します。
+- tmux は各サーバーの専用ソケット `job-scheduler` に、`jobs` セッションを1つだけ使います。ジョブごとのウィンドウは終了時に閉じ、`overview` は再利用用に残します。既存の対話用 tmux には触れません。
+- モデルと結果は SAN 上の V2VSimulator に保存します。**自動 rsync は無効です。** コンテナ内のマウント外にだけ書いたファイルは、コンテナ削除時に消えます。
+- ログ、要求、ワーカー、実行履歴は確認用に保存します。履歴のディスク使用量は増えます。
+- ホスト停止・ワーカー消失・削除失敗時などは `unknown` になる場合があります。その場合は残った処理を調べてから対処します。
 
-共有キュー対応前に投入したジョブは、元の PC のローカル履歴に残る。稼働中の古いジョブを新しい共有ジョブとして再登録しない。
-
-## GitHub で管理する
-
-コード・`hosts.json`・`examples/`・`jobs/` は private リポジトリに保存できる。ジョブ定義や書き出した履歴 JSON も Git 管理の対象にする。
+手動で tmux の画面を見る場合だけ、SSH 先で次を実行します。
 
 ```bash
-# 最後に取得した履歴を jobs/history.json へ保存（SSH 接続なし）
+tmux -L job-scheduler attach -t jobs
+```
+
+キャッシュイメージはテンプレートのコンテナ ID ごとに1つです。依存関係やコンテナ内ライブラリを更新した場合は、全ジョブ終了後に対象キャッシュを削除すると次回に再作成します。`runtime_image` を設定すれば、指定した準備済みイメージを使うこともできます。
+
+## 8. 複数 PC と GitHub
+
+同じ SSH ユーザー・SAN・設定を使う PC 間で、待機キューと実行状態を共有します。どの PC からも `status`、`logs --running`、`cancel` を使えます。SAN のロックで同じジョブの二重投入と GPU の重複割当てを防ぎます。
+
+通常は glockenspiel に共有キューを問い合わせ、接続できなければ他の設定済みサーバーを試します。常時接続は行いません。
+
+GitHub の private リポジトリでは、コード、`hosts.json`、`jobs/` の定義・履歴 JSON を管理できます。
+
+```bash
+# 手元の履歴を jobs/history.json に保存。SSH 接続なし
 python3 scheduler.py export
 
-# SAN とリモートの状態を取得してから保存
+# SAN とサーバーの最新状態を取得してから保存
 python3 scheduler.py export --refresh
 ```
 
-`export --output jobs/別名.json` で保存先を変更できる。JSON にはコマンド・状態・ホスト・時刻・同期結果などを含む。`export --refresh` は結果の rsync を実行しない。commit / push は手動で行う。
+commit / push は手動です。稼働状態の共有は SAN が基準で、Git の JSON は記録用です。`state/` の SQLite とロックファイルは Git 管理から除外しています。
 
-実行中に更新される `state/queue.sqlite3` とロックファイルは `.gitignore` で除外する。複数 PC の稼働状態は SAN が基準で、Git の JSON は実験履歴の記録に使う。
+## 9. その他の操作・保存先
 
-## 実行上の注意
+```bash
+# 接続せず、手元に登録だけする。次の dispatch まで他 PC には公開されない
+python3 scheduler.py submit-batch jobs/transformer_method4_highway_urban_steps30_80.json --queue-only
 
-- コマンドはフォアグラウンドで実行する。末尾の `&`、`nohup`、ジョブ内の追加 tmux などで切り離すと、実際の学習処理の終了コードを追跡できない。
-- 各サーバーには事前に必要なコード、設定、モデルがあること。実行中に Git pull やコンテナ再作成をしない。
-- 複数ジョブが同じ出力先へ書き込まないよう、実験名・出力先を分ける。全ホストは SAN で作業ファイルを共有するため、ホストが異なっても同じファイルへの書込みが競合する。
-- tmux は SSH 切断からジョブを守る。コンテナの停止やサーバーの再起動からは守れない。
-- コマンドや引数は履歴ファイルに保存されるので、秘密情報は書き込まない。
-
-## 設定の変更
-
-`hosts.json` の既定値は、ホストごとに上書きできる。
-
-`runtime_image` を指定すると、その準備済みイメージを使い、自動スナップショットの作成を省略できる。自動キャッシュにテンプレート内の依存関係の変更を反映したい場合は、全ジョブの終了後に `docker image ls job-scheduler-runtime` で対象を確認し、対象のキャッシュタグを `docker image rm <タグ>` で削除する。次のジョブで再作成される。テンプレートを作り直した場合は新しいコンテナ ID 用のキャッシュを作るため、不要になった旧キャッシュは手動で削除できる。
-
-```json
-{
-  "ssh": "glockenspiel",
-  "container": "別のコンテナ名",
-  "workdir": "/別の作業ディレクトリ"
-}
+# SSH 接続せず、最後に取得した状態だけ見る
+python3 scheduler.py status --local
 ```
 
-設定ファイルやローカル状態の保存先を分ける場合は、グローバル引数をサブコマンドの前に置く。
+`--queue-only` も新しいジョブの登録なので、既に投入済みの定義を再登録する用途には使いません。
+
+| 保存物 | 場所 |
+|---|---|
+| ローカルのキャッシュ・未公開キュー | `JobScheduler/state/queue.sqlite3` |
+| SAN の共有キュー | `~/.local/state/job-scheduler/shared/` |
+| サーバー別のログ・要求・状態 | `~/.local/state/job-scheduler/<hostname>/<全ジョブID>/` |
+| ジョブ専用コンテナ | `job-scheduler-<全ジョブID>` |
+
+別の設定やローカル状態を使う場合、グローバル引数をサブコマンドの前に置きます。
 
 ```bash
 python3 scheduler.py --config hosts.json --state-dir /tmp/job-scheduler-demo gpus
 ```
 
-## テスト
+結果転送の旧機能は任意設定として残していますが、現在の `results_sync: null` では実行しません。過去の同期記録があれば `SYNC` 列に表示される場合があります。
+
+テストは次で実行できます。実 GPU・SSH・実コンテナは使わず、隔離した tmux と Docker の代替プログラムで検証します。
 
 ```bash
 python3 -m unittest -v test_scheduler.py
 ```
-
-実 GPU、SSH、実コンテナを使わずに、GPU の選択、一括投入、共有キュー、複数 PC の同時投入、キャンセル、専用コンテナの削除、一括ログ、結果同期、履歴エクスポートを検証する。Docker はテスト用の代替プログラムを使い、tmux は専用ソケットの隔離したサーバーでウィンドウの後片付けまで確認する。tmux のローカルソケット作成が制限されたサンドボックスでは、通常のターミナルから実行する。

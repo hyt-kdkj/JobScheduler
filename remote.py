@@ -203,7 +203,11 @@ def reservations():
     for path in root_dir().glob('*/status.json'):
         data = read_job(path.parent.name)
         if data['status'] in ('reserved', 'running', 'cancelling', 'unknown'):
-            result[data['gpu']] = data['id']
+            request_path = path.parent / 'request.json'
+            req = json.loads(request_path.read_text()) if request_path.exists() else {}
+            data['min_free_mib'] = req.get('min_free_mib', 2048)
+            data['job_container'] = data.get('job_container', req.get('job_container'))
+            result.setdefault(data['gpu'], []).append(data)
     return result
 
 
@@ -213,23 +217,56 @@ def probe(req):
     result = run(docker_command(req, query))
     if result.returncode:
         raise RuntimeError((result.stderr + result.stdout).strip())
-    apps = run(docker_command(req, 'nvidia-smi --query-compute-apps=gpu_uuid,pid '
+    apps = run(docker_command(req, 'nvidia-smi --query-compute-apps=gpu_uuid,pid,used_gpu_memory '
                               '--format=csv,noheader,nounits'))
     if apps.returncode:
         raise RuntimeError('Cannot check GPU processes: ' + apps.stderr.strip())
-    active = {row[0].strip() for row in csv.reader(io.StringIO(apps.stdout)) if row}
+    active = {}
+    for row in csv.reader(io.StringIO(apps.stdout)):
+        if not row or not row[0].strip().startswith('GPU-'):
+            continue
+        uuid, pid = row[0].strip(), int(row[1].strip())
+        try:
+            used = int(row[2].strip())
+        except (IndexError, ValueError):
+            used = 0
+        active.setdefault(uuid, {})[pid] = used
     reserved = reservations()
     gpus = []
     for row in csv.reader(io.StringIO(result.stdout)):
         if not row:
             continue
         index, uuid, name, total, used, util = [v.strip() for v in row]
+        jobs = reserved.get(uuid, [])
+        managed_pids, pending_mib = set(), 0
+        for job in jobs:
+            pids = set()
+            if job.get('job_container'):
+                top = run(['docker', 'top', job['job_container'], '-eo', 'pid'])
+                if top.returncode == 0:
+                    pids = {int(line.strip()) for line in top.stdout.splitlines()
+                            if line.strip().isdigit()}
+            matched = pids & set(active.get(uuid, {}))
+            managed_pids.update(matched)
+            allocated = sum(active[uuid][pid] for pid in matched)
+            pending_mib += max(0, job['min_free_mib'] - allocated)
+        external_pids = set(active.get(uuid, {})) - managed_pids
+        slots = len(jobs) + len(external_pids)
+        limit = req.get('max_jobs_per_gpu', 1)
+        margin = req.get('gpu_memory_headroom_mib', 0)
         gpu = dict(index=int(index), uuid=uuid, name=name, total_mib=int(total),
                    used_mib=int(used), utilization=int(util),
-                   reserved_by=reserved.get(uuid), compute_process=uuid in active)
+                   reserved_by=jobs[0]['id'] if jobs else None,
+                   compute_process=bool(active.get(uuid)), occupied_slots=slots,
+                   max_jobs=limit, external_processes=len(external_pids),
+                   pending_mib=pending_mib,
+                   available_mib=max(0, int(total) - int(used) - pending_mib - margin))
         gpu['idle'] = (not gpu['reserved_by'] and not gpu['compute_process']
                        and gpu['used_mib'] <= req['idle_max_used_mib']
                        and gpu['utilization'] <= req['idle_max_utilization'])
+        gpu['accepting_jobs'] = (gpu['idle'] if limit == 1 else
+                                 slots < limit and gpu['available_mib'] > 0
+                                 and not any(j['status'] == 'unknown' for j in jobs))
         gpus.append(gpu)
     return {'gpus': gpus}
 
@@ -349,8 +386,8 @@ def launch_local(req):
         return read_job(req['id'])  # A retry after SSH disconnect is idempotent.
     gpus = probe(req)['gpus']
     candidate = next((g for g in gpus if g['uuid'] == req['gpu']), None)
-    if (not candidate or not candidate['idle'] or
-            candidate['total_mib'] - candidate['used_mib'] < req['min_free_mib']):
+    if (not candidate or not candidate['accepting_jobs'] or
+            candidate['available_mib'] < req['min_free_mib']):
         return {'status': 'busy'}
     directory.mkdir(mode=0o700)
     req['session'] = 'jobs'
