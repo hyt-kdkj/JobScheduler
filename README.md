@@ -17,7 +17,7 @@ python3 scheduler.py dispatch
 | 状態を見るだけ | `python3 scheduler.py status` | いいえ |
 | 待機ジョブを進める | `python3 scheduler.py dispatch` | はい。実行枠と VRAM に余裕があれば開始 |
 | 状態確認と投入をまとめる | `python3 scheduler.py status --dispatch` | はい |
-| 実行中のログをファイルに保存 | `python3 scheduler.py logs --running --lines 200` | いいえ |
+| 実行中のログをファイルに保存 | `python3 scheduler.py logs --running --lines 1000` | いいえ |
 
 `dispatch` はサブコマンド、`--dispatch` は `status` に付けるオプションです。`--dispach` という指定はありません。
 
@@ -103,15 +103,15 @@ python3 scheduler.py status
 ### 実行中のログをまとめて保存する
 
 ```bash
-python3 scheduler.py logs --running --lines 200
+python3 scheduler.py logs --running --lines 1000
 ```
 
-実行中・起動準備中・停止要求中の各ジョブについて、末尾200行をカレントディレクトリの `logs/current/` に保存します。ターミナルには保存先だけを表示し、ログ本文は表示しません。ログの問い合わせはサーバーごとにまとめます。
+実行中・起動準備中・停止要求中の各ジョブについて、末尾1000行をカレントディレクトリの `logs/current/` に保存します。ターミナルには保存先だけを表示し、ログ本文は表示しません。ログの問い合わせはサーバーごとにまとめます。
 
 保存先を変更する場合は `--output-dir` を指定します。
 
 ```bash
-python3 scheduler.py logs --running --lines 200 --output-dir logs/checkpoint
+python3 scheduler.py logs --running --lines 1000 --output-dir logs/checkpoint
 ```
 
 標準では `logs/current/highway_4_30_11ded7e0.log` のように、**ジョブ名＋短い ID** のファイル名で保存します。同じジョブ名を再実行してもログが混ざらないよう、末尾に ID を付けます。再取得すると同じファイルを最新の末尾ログで上書きします。名前がないジョブは `job_<ID>.log` になります。各ジョブの取得量は末尾256 KiBまでです。以前の ID だけのファイルはそのまま残します。
@@ -135,7 +135,7 @@ python3 scheduler.py status --dispatch
 次の `JOB_ID` は、`status` の左端の ID に置き換えます。先頭8文字でも指定できます。`highway_4_30` のようなジョブ名ではなく、ID を指定してください。
 
 ```bash
-python3 scheduler.py logs JOB_ID --lines 200
+python3 scheduler.py logs JOB_ID --lines 1000
 python3 scheduler.py info JOB_ID
 ```
 
