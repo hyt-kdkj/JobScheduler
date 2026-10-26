@@ -1,0 +1,13 @@
+{
+  "jobs": [
+    {
+      "name": "eval_{scenario}_4_{step}_{num_vehicles}_analysis",
+      "command": "python3 evaluate_methods.py --agents Transformer --method 4 --scenario {scenario} --step {step} --num-vehicles {num_vehicles} --analysis-only",
+      "matrix": {
+        "scenario": ["highway", "urban"],
+        "step": [10, 20, 30, 40, 50, 60, 70, 80],
+        "num_vehicles": [120, 360]
+      }
+    }
+  ]
+}
