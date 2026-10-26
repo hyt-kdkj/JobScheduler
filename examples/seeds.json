@@ -1,0 +1,15 @@
+{
+  "defaults": {
+    "min_free_gb": 4
+  },
+  "jobs": [
+    {
+      "name": "highway-{vehicles}veh-seed{seed}",
+      "command": "printf 'vehicles={vehicles} seed={seed} GPU=%s\\n' \"$CUDA_VISIBLE_DEVICES\"",
+      "matrix": {
+        "vehicles": [120, 240],
+        "seed": [42, 43, 44]
+      }
+    }
+  ]
+}

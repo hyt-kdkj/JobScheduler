@@ -1,0 +1,25 @@
+{
+  "container": "v2vsimulator-v2v-dev-1",
+  "workdir": "/workspace/V2VSimulator/Simulator",
+  "idle_max_used_mib": 512,
+  "idle_max_utilization": 10,
+  "shared_queue": {"host": "glockenspiel"},
+  "results_sync": {
+    "source": "glockenspiel:~/workspace/V2VSimulator/Simulator/save_results/",
+    "destination": "~/workspace/V2VSimulator/Simulator/save_results/",
+    "timeout_seconds": 1800
+  },
+  "priorities": {
+    "RTX 5000 Ada": 100,
+    "Quadro RTX 6000": 60,
+    "GTX 1080 Ti": 40,
+    "P100": 30
+  },
+  "hosts": [
+    {"ssh": "glockenspiel"},
+    {"ssh": "marimba"},
+    {"ssh": "xylophone0"},
+    {"ssh": "xylophone1"},
+    {"ssh": "xylophone3"}
+  ]
+}
