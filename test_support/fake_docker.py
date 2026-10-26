@@ -27,7 +27,10 @@ def main():
     if action == 'inspect':
         name = args[-1]
         if name == 'test':
-            info = dict(Id='a' * 64, Config=dict(Env=['TEST_RUNTIME=yes']),
+            info = dict(Id='a' * 64, Config=dict(Env=['TEST_RUNTIME=yes'], Labels={
+                            'com.docker.compose.project': 'v2vsimulator',
+                            'com.docker.compose.service': 'v2v-dev',
+                            'com.docker.compose.container-number': '1'}),
                         Mounts=[dict(Type='bind', Source=str(root.parent),
                                      Destination='/workspace/V2VSimulator', RW=True)],
                         HostConfig=dict(Devices=[], DeviceRequests=None))

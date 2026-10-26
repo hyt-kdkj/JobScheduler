@@ -424,7 +424,8 @@ class DetachedLifecycleTest(unittest.TestCase):
                 marker = Path('/tmp') / f'job-scheduler-{os.getuid()}' / (self.req['id'] + '.json')
                 self.assertFalse(marker.exists())
                 if self.docker_log.exists():
-                    self.assertFalse(list((self.root / 'docker-state/containers').iterdir()))
+                    self.assertFalse((self.root / 'docker-state/containers' /
+                                      ('job-scheduler-' + self.req['id'])).exists())
                 return data
             time.sleep(0.05)
         self.fail('Detached worker did not finish: ' + repr(data))
@@ -439,6 +440,13 @@ class DetachedLifecycleTest(unittest.TestCase):
         self.assertEqual(result['exit_code'], 0)
         logs = self.ns['main']({'action': 'logs', 'id': self.req['id']})
         self.assertIn('result:GPU-test', logs['log'])
+        operations = [json.loads(line) for line in self.docker_log.read_text().splitlines()]
+        command = next(op for op in operations if op[0] == 'run')
+        labels = dict(command[i + 1].split('=', 1) for i, arg in enumerate(command)
+                      if arg == '--label')
+        self.assertEqual(labels['job-scheduler.id'], self.req['id'])
+        for key in ('project', 'service', 'container-number'):
+            self.assertEqual(labels['com.docker.compose.' + key], '')
         # Completed requests are not executed again even after their tmux exits.
         self.assertEqual(self.ns['main'](self.req)['status'], 'succeeded')
 

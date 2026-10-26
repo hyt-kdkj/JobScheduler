@@ -299,6 +299,14 @@ def job_command(req):
             '--label', 'job-scheduler.id=' + req['id'],
             '--user', f'{os.getuid()}:{os.getgid()}', '--workdir', req['workdir'],
             '--entrypoint', 'bash']
+    # docker commit preserves Compose ownership labels. Neutralize them at run
+    # time, including for existing cached/custom images, so Compose operations
+    # on the template project cannot select and stop our independent jobs.
+    compose_labels = {key for key in (template['Config'].get('Labels') or {})
+                      if key.startswith('com.docker.compose.')}
+    compose_labels.update(('com.docker.compose.project', 'com.docker.compose.service'))
+    for key in sorted(compose_labels):
+        args += ['--label', key + '=']
     for env in template['Config'].get('Env') or []:
         args += ['--env', env]
     for env in (f'CUDA_VISIBLE_DEVICES={req["gpu"]}', 'CUDA_DEVICE_ORDER=PCI_BUS_ID',
