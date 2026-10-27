@@ -9,8 +9,8 @@
 ```bash
 cd ~/workspace/JobScheduler
 
-# 一括投入：highway / urban × step 30〜80 の12件
-python3 scheduler.py submit-batch jobs/transformer_method4.json
+# 一括投入：highway / urban × step 10〜80 の16件
+python3 scheduler.py submit-batch jobs/train_transformer.json
 
 # 状態を確認（新しいジョブは開始しない）
 python3 scheduler.py status
@@ -28,10 +28,10 @@ python3 scheduler.py logs --running --lines 1000
 
 ```bash
 # 内容確認だけ。登録・SSH 接続なし
-python3 scheduler.py submit-batch jobs/lstm_method1.json --dry-run
+python3 scheduler.py submit-batch jobs/train_lstm.json --dry-run
 
 # ローカルのキューに登録だけ。次の dispatch で共有・投入される
-python3 scheduler.py submit-batch jobs/lstm_method1.json --queue-only
+python3 scheduler.py submit-batch jobs/train_lstm.json --queue-only
 
 # 1件だけ投入
 python3 scheduler.py submit --name highway_4_30 \
@@ -46,7 +46,7 @@ python3 scheduler.py submit --name highway_4_30 \
 
 | 操作 | コマンド |
 |---|---|
-| キャンセル済みも表示 | `python3 scheduler.py status --all` |
+| 失敗・キャンセル済みも表示 | `python3 scheduler.py status --all` |
 | SSH 接続せず、手元の状態だけ表示 | `python3 scheduler.py status --local` |
 | 状態確認と待機ジョブの投入 | `python3 scheduler.py status --dispatch` |
 | コマンド・実行先・Batch ID の詳細 | `python3 scheduler.py info JOB_ID` |
@@ -55,7 +55,9 @@ python3 scheduler.py submit --name highway_4_30 \
 | バッチ全体をキャンセル | `python3 scheduler.py cancel --batch BATCH_ID` |
 | GPU の使用状況を確認 | `python3 scheduler.py gpus` |
 
-`status` は **正常終了 → 失敗 → 実行中 → 待機中** の順に表示します。同じグループ内は登録順で、キャンセル済みは通常非表示です。`ELAPSED` は待機時間を含まない実行時間です。
+`status` は **正常終了 → 実行中 → 待機中** の順に表示します。同じグループ内は登録順で、失敗・キャンセル済みは通常非表示です。`--all`を付けると失敗ジョブは正常終了の次、キャンセル済みは末尾に表示します。履歴は保持されます。`ELAPSED` は待機時間を含まない実行時間です。
+
+`AGENTS`列には、コマンドから判別した`LSTM`・`Transformer`などの手法名を表示します。比較ジョブは`SPS+IPMI+LSTM`のように表示し、判別できないコマンドは`-`になります。登録済みのジョブにも反映され、同じジョブ名でも手法を区別できます。
 
 | STATE | 意味 |
 |---|---|

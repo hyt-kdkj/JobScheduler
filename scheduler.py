@@ -341,6 +341,29 @@ def elapsed(job, now=None):
     return f'{hours:02}:{minutes:02}:{seconds:02}'
 
 
+def job_agents(job):
+    try:
+        tokens = shlex.split(job.get('command', ''))
+    except ValueError:
+        return '-'
+    training = {'train_lstm.py': 'LSTM', 'train_transformer.py': 'Transformer'}
+    for token in tokens:
+        if Path(token).name in training:
+            return training[Path(token).name]
+    agents = []
+    for index, token in enumerate(tokens):
+        if token == '--agents':
+            for agent in tokens[index + 1:]:
+                if agent.startswith('-') or agent in (';', '&&', '||', '|', '>', '>>'):
+                    break
+                agents.append(agent)
+            break
+        if token.startswith('--agents='):
+            agents = [token.split('=', 1)[1]]
+            break
+    return '+'.join(agents) or '-'
+
+
 def show_jobs(jobs, include_cancelled=True):
     now = time.time()
     order = {'succeeded': 0, 'failed': 1, 'running': 2, 'reserved': 2,
@@ -349,13 +372,14 @@ def show_jobs(jobs, include_cancelled=True):
     jobs = sorted((j for j in jobs if include_cancelled or j['status'] != 'cancelled'),
                   key=lambda j: (order.get(j['status'], 2), j['created'], j['id']))
     print(f'{"ID":8} {"STATE":12} {"HOST":13} {"GPU":3} {"EXIT":4} '
-          f'{"ELAPSED":10} {"SYNC":9} NAME / COMMAND')
+          f'{"ELAPSED":10} {"SYNC":9} {"AGENTS":24} NAME / COMMAND')
     for j in jobs:
         print(f'{j["id"][:8]} {j["status"]:12} {(j.get("host") or "-"):13} '
               f'{str(j.get("gpu_index", "-")):3} '
               f'{str(j.get("exit_code", "-")):4} '
               f'{elapsed(j, now):10} '
               f'{j.get("result_sync", {}).get("status", "-"):9} '
+              f'{job_agents(j):24} '
               f'{j.get("name") or j["command"]}')
         for key in ('error', 'connection_error', 'cleanup_error'):
             if j.get(key):
@@ -523,7 +547,7 @@ def parser():
     s = sub.add_parser('status', help='Show completion state and exit codes')
     s.add_argument('--local', action='store_true', help='Show cached state without SSH')
     s.add_argument('--dispatch', action='store_true', help='Also try queued jobs once')
-    s.add_argument('--all', action='store_true', help='Include cancelled jobs')
+    s.add_argument('--all', action='store_true', help='Include failed and cancelled jobs')
     s = sub.add_parser('logs', help='Save the remote log tail to files, including after completion')
     s.add_argument('id', nargs='?')
     s.add_argument('--running', action='store_true', help='Get logs for all active jobs')
@@ -600,7 +624,8 @@ def main():
             refresh_shared(cfg, queue)
             refresh_status(queue)
             sync_completed(cfg, queue)
-        show_jobs(queue.all(), include_cancelled=args.all)
+        jobs = [j for j in queue.all() if args.all or j['status'] != 'failed']
+        show_jobs(jobs, include_cancelled=args.all)
     elif args.action == 'logs':
         if args.lines < 1:
             raise ValueError('--lines must be positive')

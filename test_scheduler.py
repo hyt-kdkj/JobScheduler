@@ -264,7 +264,7 @@ class SchedulingTest(unittest.TestCase):
         self.assertEqual(s.elapsed(dict(started=100), now=3761), '01:01:01')
         self.assertEqual(s.elapsed(dict(started=100, finished=160), now=5000), '00:01:00')
 
-    def test_status_hides_cancelled_and_sorts_by_state_without_changing_history(self):
+    def test_status_hides_failed_and_cancelled_and_sorts_without_changing_history(self):
         states = ['queued', 'cancelled', 'running', 'failed', 'succeeded', 'queued']
         jobs = []
         for i, state in enumerate(states):
@@ -272,7 +272,7 @@ class SchedulingTest(unittest.TestCase):
             job.update(status=state, created=i)
             self.q.put(job)
             jobs.append(job)
-        for extra, expected in (([], [4, 3, 2, 0, 5]),
+        for extra, expected in (([], [4, 2, 0, 5]),
                                 (['--all'], [4, 3, 2, 0, 5, 1])):
             terminal = io.StringIO()
             argv = ['scheduler.py', '--state-dir', str(self.q.directory),
@@ -284,6 +284,44 @@ class SchedulingTest(unittest.TestCase):
             ids = [line.split()[0] for line in terminal.getvalue().splitlines()[1:]]
             self.assertEqual(ids, [jobs[i]['id'][:8] for i in expected])
         self.assertEqual(len(self.q.all()), len(jobs))
+
+    def test_job_agents_uses_training_script_or_agent_arguments(self):
+        cases = [
+            ('python3 train_lstm.py --method 4', 'LSTM'),
+            ('python3 /workspace/train_transformer.py --method 4', 'Transformer'),
+            ('python3 evaluate_methods.py --agents LSTM --method 4', 'LSTM'),
+            ('python3 evaluate_methods.py --agents Transformer --analysis-only', 'Transformer'),
+            ('python3 plot_evaluation.py --agents SPS IPMI LSTM --method 4', 'SPS+IPMI+LSTM'),
+            ('python3 plot_evaluation.py --agents SPS IPMI Transformer', 'SPS+IPMI+Transformer'),
+            ('python3 evaluate_methods.py --agents=LSTM --method 4', 'LSTM'),
+            ('echo unrelated', '-'),
+            ('python3 "unterminated', '-'),
+        ]
+        for command, expected in cases:
+            with self.subTest(command=command):
+                self.assertEqual(s.job_agents({'command': command}), expected)
+
+    def test_status_identifies_existing_jobs_with_the_same_name(self):
+        jobs = []
+        for agent in ('LSTM', 'Transformer'):
+            job = self.job()
+            job.update(name='eval_highway_4_10_120', status='running',
+                       command=f'python3 evaluate_methods.py --agents {agent} --method 4')
+            self.q.put(job)
+            jobs.append(job)
+        terminal = io.StringIO()
+        argv = ['scheduler.py', '--state-dir', str(self.q.directory), 'status', '--local']
+        with patch.object(sys, 'argv', argv), patch.object(s, 'remote') as connect, \
+             contextlib.redirect_stdout(terminal):
+            s.main()
+        connect.assert_not_called()
+        lines = terminal.getvalue().splitlines()
+        self.assertIn('AGENTS', lines[0])
+        for job, agent in zip(jobs, ('LSTM', 'Transformer')):
+            row = next(line for line in lines[1:] if line.startswith(job['id'][:8]))
+            self.assertIn(agent, row)
+            self.assertIn(job['name'], row)
+            self.assertEqual(self.q.get(job['id']), job)
 
     def test_running_logs_groups_requests_by_host_and_saves_files(self):
         jobs = [self.job() for _ in range(3)]

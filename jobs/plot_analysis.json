@@ -1,0 +1,20 @@
+{
+  "jobs": [
+    {
+      "name": "plot_transformer_highway_{method}_steps10to80_{num_vehicles}_analysis",
+      "command": "python3 plot_evaluation.py --agents SPS IPMI Transformer --method {method} --scenario highway --step 10 20 30 40 50 60 70 80 --num-vehicles {num_vehicles} --analysis-only",
+      "matrix": {
+        "method": [4],
+        "num_vehicles": [120, 360]
+      }
+    },
+    {
+      "name": "plot_transformer_urban_{method}_steps10to80_{num_vehicles}_analysis",
+      "command": "python3 plot_evaluation.py --agents SPS IPMI Transformer --method {method} --scenario urban --step 10 20 30 40 50 60 70 80 --num-vehicles {num_vehicles} --analysis-only",
+      "matrix": {
+        "method": [4],
+        "num_vehicles": [200, 500]
+      }
+    }
+  ]
+}

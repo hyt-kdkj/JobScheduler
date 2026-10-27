@@ -1,7 +1,7 @@
 {
   "jobs": [
     {
-      "name": "{scenario}_4_{step}",
+      "name": "train_transformer_{scenario}_4_{step}",
       "command": "python3 train_transformer.py --scenario {scenario} --method 4 --step {step}",
       "matrix": {
         "scenario": ["highway", "urban"],

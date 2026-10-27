@@ -1,7 +1,7 @@
 {
   "jobs": [
     {
-      "name": "{scenario}_1_{step}",
+      "name": "train_lstm_{scenario}_1_{step}",
       "command": "python3 train_lstm.py --scenario {scenario} --method 1 --step {step}",
       "matrix": {
         "scenario": ["highway", "urban"],
