@@ -1,6 +1,6 @@
 # Gitで管理するジョブ定義
 
-ジョブ定義は次の10ファイルです。`JobScheduler/`内で実行します。
+ジョブ定義は次の11ファイルです。`JobScheduler/`内で実行します。
 
 | ファイル | 内容 | ジョブ数 |
 |---|---|---:|
@@ -8,6 +8,7 @@
 | `train_lstm.json` | LSTM学習（method 1） | 16 |
 | `evaluate_transformer.json` | Transformer通常評価（method 4） | 32 |
 | `evaluate_transformer_analysis.json` | Transformer詳細解析（method 4） | 32 |
+| `evaluate_transformer_feature_ablation.json` | Transformer特徴量の無効化比較（method 4、step 10・20・30） | 12 |
 | `evaluate_lstm.json` | LSTM通常評価（method 4） | 32 |
 | `evaluate_lstm_analysis.json` | LSTM詳細解析（method 4） | 32 |
 | `plot.json` | SPS・IPMI・Transformerの比較グラフ（通常評価） | 4 |
@@ -15,7 +16,7 @@
 | `plot_with_lstm.json` | SPS・IPMI・Transformer・LSTMの比較グラフ（通常評価） | 4 |
 | `plot_with_lstm_analysis.json` | SPS・IPMI・Transformer・LSTMの比較グラフ（詳細解析） | 4 |
 
-全ファイルでhighway / urban、step 10〜80（10刻み）を対象にします。評価・plotはhighway 120・360台、urban 200・500台です。学習の車両数はシミュレータの既定値を使います。既存のmethod指定を維持しているため、LSTM学習はmethod 1、LSTM単独評価はmethod 4、`plot_with_lstm.json`のLSTMはmethod 1です。method 4を評価するには対応する学習済みモデルを別途用意するか、学習定義のmethod指定を変更してください。
+特徴量比較以外はhighway / urban、step 10〜80（10刻み）を対象にします。評価・plotはhighway 120・360台、urban 200・500台です。学習の車両数はシミュレータの既定値を使います。既存のmethod指定を維持しているため、LSTM学習はmethod 1、LSTM単独評価はmethod 4、`plot_with_lstm.json`のLSTMはmethod 1です。method 4を評価するには対応する学習済みモデルを別途用意するか、学習定義のmethod指定を変更してください。
 
 通常評価は`--analysis-only`なし（既定15 seed）、詳細解析は`--analysis-only`あり（既定seed 100）です。測定データはそれぞれ`save_results/evaluation/`と`save_results/analysis/`に保存されます。
 
@@ -45,3 +46,12 @@ python3 scheduler.py submit-batch jobs/plot_with_lstm_analysis.json
 `python3 scheduler.py export`で履歴を`jobs/history.json`に書き出せます。`export --refresh`はSANの共有キューとリモート状態を取得してから書き出し、結果のrsyncは行いません。履歴JSONは記録用で、一括投入の入力にはなりません。
 
 各PCは独立したローカルSQLiteを持ち、SAN上の共有キューを参照します。稼働状態の同期はSANで行い、定義・履歴はGitで管理できます。commit・pushは手動で行います。
+
+## 特徴量の影響を比較する
+
+`evaluate_transformer_feature_ablation.json` は highway 120・360台、urban 200・500台 × step 10・20・30 の12ジョブです。highway は120台で学習したモデル、urban は200台で学習したモデルを使用します。通常入力＋5特徴量の個別ゼロ置換を各15 seedで比較し、結果は `save_results/evaluation/` 以下の `feature_ablation/` に `summary.csv`・`per_seed.csv`・`manifest.json` として保存されます。これはPERなどの性能変化による比較で、Q値への直接の寄与率ではありません。
+
+```bash
+python3 scheduler.py submit-batch jobs/evaluate_transformer_feature_ablation.json --dry-run
+python3 scheduler.py submit-batch jobs/evaluate_transformer_feature_ablation.json
+```

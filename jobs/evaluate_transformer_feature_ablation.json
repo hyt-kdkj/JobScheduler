@@ -1,0 +1,34 @@
+{
+  "jobs": [
+    {
+      "name": "feature_ablation_transformer_highway_4_{step}_{num_vehicles}",
+      "command": "python3 evaluate_feature_ablation.py --agents Transformer --method 4 --scenario highway --step {step} --num-vehicles {num_vehicles} --model highway:120 --analysis-only",
+      "matrix": {
+        "step": [
+          10,
+          20,
+          30
+        ],
+        "num_vehicles": [
+          120,
+          360
+        ]
+      }
+    },
+    {
+      "name": "feature_ablation_transformer_urban_4_{step}_{num_vehicles}",
+      "command": "python3 evaluate_feature_ablation.py --agents Transformer --method 4 --scenario urban --step {step} --num-vehicles {num_vehicles} --model urban:200 --analysis-only",
+      "matrix": {
+        "step": [
+          10,
+          20,
+          30
+        ],
+        "num_vehicles": [
+          200,
+          500
+        ]
+      }
+    }
+  ]
+}
