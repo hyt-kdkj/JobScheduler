@@ -1,10 +1,17 @@
 {
   "jobs": [
     {
-      "name": "eval_{scenario}_1_{step}_{num_vehicles}_analysis",
-      "command": "python3 evaluate_methods.py --agents LSTM --method 1 --scenario {scenario} --step {step} --num-vehicles {num_vehicles} --analysis-only",
+      "name": "eval_highway_4_{step}_{num_vehicles}_analysis",
+      "command": "python3 evaluate_methods.py --agents LSTM --method 4 --scenario highway --step {step} --num-vehicles {num_vehicles} --analysis-only",
       "matrix": {
-        "scenario": ["highway", "urban"],
+        "step": [10, 20, 30, 40, 50, 60, 70, 80],
+        "num_vehicles": [120, 360]
+      }
+    },
+    {
+      "name": "eval_urban_4_{step}_{num_vehicles}_analysis",
+      "command": "python3 evaluate_methods.py --agents LSTM --method 4 --scenario urban --step {step} --num-vehicles {num_vehicles} --analysis-only",
+      "matrix": {
         "step": [10, 20, 30, 40, 50, 60, 70, 80],
         "num_vehicles": [200, 500]
       }
