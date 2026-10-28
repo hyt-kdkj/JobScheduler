@@ -120,10 +120,14 @@ class Queue:
                         '(id TEXT PRIMARY KEY, created REAL NOT NULL, body TEXT NOT NULL)')
 
     def put(self, job):
+        self.put_many([job])
+
+    def put_many(self, jobs):
         with self.db:
-            self.db.execute('INSERT INTO jobs VALUES (?, ?, ?) ON CONFLICT(id) '
-                            'DO UPDATE SET body=excluded.body',
-                            (job['id'], job['created'], json.dumps(job, ensure_ascii=False)))
+            self.db.executemany('INSERT INTO jobs VALUES (?, ?, ?) ON CONFLICT(id) '
+                                'DO UPDATE SET body=excluded.body',
+                                [(job['id'], job['created'], json.dumps(job, ensure_ascii=False))
+                                 for job in jobs])
 
     def add_many(self, jobs):
         with self.db:
@@ -196,6 +200,7 @@ def refresh_shared(cfg, queue, publish=False):
     pending = [j for j in queue.all() if j['status'] == 'queued' and not j.get('published')] if publish else []
     response = shared_rpc(cfg, {'action': 'shared_sync', 'jobs': pending})
     existing = {j['id']: j for j in queue.all()}
+    updates = []
     for remote_job in response['jobs']:
         job = dict(existing.get(remote_job['id'], {}))
         if job.get('status') in TERMINAL and remote_job['status'] not in TERMINAL:
@@ -207,7 +212,10 @@ def refresh_shared(cfg, queue, publish=False):
         job.update(remote_job, published=True)
         if sync:
             job['result_sync'] = sync
-        queue.put(job)
+        if job != existing.get(job['id']):
+            updates.append(job)
+    if updates:
+        queue.put_many(updates)
 
 
 def reconcile(cfg, queue):
@@ -664,22 +672,41 @@ def main():
 
 
 def refresh_status(queue, only=None):
+    hosts = {}
     for job in queue.all():
         if (only and job['id'] != only) or job['status'] in TERMINAL or not job.get('host'):
             continue
-        before = copy.deepcopy(job)
+        hosts.setdefault(job['host'], []).append(job)
+
+    def check_host(item):
+        host, jobs = item
+        requests = [dict(action='cancel' if job.get('cancel_requested') else 'status',
+                         id=job['id'], allow_missing=job['status'] == 'dispatching')
+                    for job in jobs]
         try:
-            action = 'cancel' if job.get('cancel_requested') else 'status'
-            data = remote(job['host'], {'action': action, 'id': job['id'],
-                                       'allow_missing': job['status'] == 'dispatching'})
-            # A lost launch reply may precede creation of the remote record.
-            if data['status'] == 'missing' and job['status'] == 'dispatching':
-                continue
-            apply_result(job, data)
+            if len(requests) == 1:
+                results = [remote(host, requests[0])]
+            else:
+                results = remote(host, {'action': 'status_batch', 'requests': requests})['jobs']
         except RuntimeError as exc:
-            job['connection_error'] = str(exc)
-        # A status reader must not overwrite a concurrent dispatcher's newer state.
-        queue.update_if_unchanged(before, job)
+            results = [{'error': str(exc)} for job in jobs]
+        return jobs, results
+
+    if not hosts:
+        return
+    with ThreadPoolExecutor(max_workers=min(16, len(hosts))) as pool:
+        for jobs, results in pool.map(check_host, hosts.items()):
+            for job, data in zip(jobs, results):
+                before = copy.deepcopy(job)
+                if 'error' in data and 'status' not in data:
+                    job['connection_error'] = data['error']
+                else:
+                    # A lost launch reply may precede creation of the remote record.
+                    if data['status'] == 'missing' and job['status'] == 'dispatching':
+                        continue
+                    apply_result(job, data)
+                # Only the main thread uses SQLite; preserve concurrent updates.
+                queue.update_if_unchanged(before, job)
 
 
 if __name__ == '__main__':

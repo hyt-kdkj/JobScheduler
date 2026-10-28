@@ -558,6 +558,20 @@ def main(req):
             return launch(req)
         if action == 'status':
             return read_job(req['id'])
+        if action == 'status_batch':
+            results = []
+            for request in req['requests']:
+                try:
+                    if request['action'] == 'cancel':
+                        result = cancel(request['id'], request.get('allow_missing', False))
+                    elif request['action'] == 'status':
+                        result = read_job(request['id'])
+                    else:
+                        raise ValueError('Invalid status batch action')
+                except Exception as exc:
+                    result = {'error': str(exc)}
+                results.append(result)
+            return {'jobs': results}
         if action == 'cancel':
             return cancel(req['id'], req.get('allow_missing', False))
         if action == 'logs_batch':

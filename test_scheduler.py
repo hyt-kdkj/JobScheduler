@@ -10,6 +10,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import unittest
 from unittest.mock import patch
@@ -100,6 +101,74 @@ class SchedulingTest(unittest.TestCase):
         result = self.q.get(job['id'])
         self.assertEqual(result['status'], 'running')
         self.assertEqual(result['connection_error'], 'offline')
+
+    def test_status_batches_jobs_and_checks_hosts_in_parallel(self):
+        jobs = [self.job() for _ in range(4)]
+        for job, host in zip(jobs, ('a', 'a', 'b', 'b')):
+            job.update(status='running', host=host)
+            self.q.put(job)
+        jobs[0]['cancel_requested'] = True
+        self.q.put(jobs[0])
+        barrier = threading.Barrier(2)
+
+        def remote(host, request):
+            barrier.wait(timeout=5)
+            self.assertEqual(request['action'], 'status_batch')
+            return {'jobs': [dict(status='cancelled' if r['action'] == 'cancel'
+                                 else 'succeeded', exit_code=0)
+                             for r in request['requests']]}
+
+        with patch.object(s, 'remote', side_effect=remote) as connect:
+            s.refresh_status(self.q)
+        self.assertEqual(connect.call_count, 2)
+        self.assertEqual(self.q.get(jobs[0]['id'])['status'], 'cancelled')
+        for job in jobs[1:]:
+            self.assertEqual(self.q.get(job['id'])['status'], 'succeeded')
+
+    def test_status_batch_errors_and_missing_do_not_damage_other_jobs(self):
+        jobs = [self.job() for _ in range(3)]
+        for job in jobs:
+            job.update(status='dispatching', host='a')
+            self.q.put(job)
+        results = [{'error': 'offline'}, {'status': 'missing'},
+                   {'status': 'failed', 'exit_code': 7}]
+        with patch.object(s, 'remote', return_value={'jobs': results}):
+            s.refresh_status(self.q)
+        self.assertEqual(self.q.get(jobs[0]['id'])['connection_error'], 'offline')
+        self.assertEqual(self.q.get(jobs[1]['id'])['status'], 'dispatching')
+        self.assertEqual(self.q.get(jobs[2]['id'])['exit_code'], 7)
+
+    def test_remote_status_batch_isolates_errors_and_retries_cancellation(self):
+        import remote as r
+
+        def read(job_id):
+            if job_id == 'broken':
+                raise OSError('unreadable record')
+            return dict(id=job_id, status='running')
+
+        requests = [dict(action='status', id='broken'),
+                    dict(action='cancel', id='cancelled', allow_missing=True),
+                    dict(action='status', id='healthy')]
+        with patch.object(r, 'root_dir', return_value=Path(self.temp.name)), \
+             patch.object(r, 'read_job', side_effect=read), \
+             patch.object(r, 'cancel', return_value={'status': 'cancelled'}) as cancel:
+            result = r.main(dict(action='status_batch', requests=requests))
+        self.assertEqual(result['jobs'][0], {'error': 'unreadable record'})
+        self.assertEqual(result['jobs'][1]['status'], 'cancelled')
+        self.assertEqual(result['jobs'][2]['id'], 'healthy')
+        cancel.assert_called_once_with('cancelled', True)
+
+    def test_shared_refresh_saves_changes_in_one_transaction_and_skips_unchanged(self):
+        jobs = [dict(self.job(), published=True) for _ in range(3)]
+        cfg = dict(self.cfg, shared_queue={'host': 'a'})
+        statements = []
+        self.q.db.set_trace_callback(statements.append)
+        with patch.object(s, 'shared_rpc', return_value={'jobs': jobs}):
+            s.refresh_shared(cfg, self.q)
+            self.assertEqual(statements.count('COMMIT'), 1)
+            statements.clear()
+            s.refresh_shared(cfg, self.q)
+        self.assertFalse(any(statement.startswith('INSERT') for statement in statements))
 
     def test_status_reader_cannot_roll_back_newer_state(self):
         job = self.job()
