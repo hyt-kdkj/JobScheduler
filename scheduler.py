@@ -33,7 +33,7 @@ def remote(host, request):
     try:
         result = subprocess.run(cmd, input=json.dumps(request), text=True,
                                 stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                                timeout=100)
+                                timeout=1900 if request.get('action') in ('probe', 'launch') else 100)
     except (OSError, subprocess.TimeoutExpired) as exc:
         raise RuntimeError(str(exc)) from exc
     if result.returncode:
@@ -76,6 +76,8 @@ def host_request(cfg, host):
               ('container', 'workdir', 'idle_max_used_mib', 'idle_max_utilization')}
     if entry.get('runtime_image', cfg.get('runtime_image')):
         result['runtime_image'] = entry.get('runtime_image', cfg.get('runtime_image'))
+    if entry.get('template_start_script', cfg.get('template_start_script')):
+        result['template_start_script'] = entry.get('template_start_script', cfg.get('template_start_script'))
     for key, default in (('max_jobs_per_gpu', 1), ('gpu_memory_headroom_mib', 0)):
         result[key] = entry.get(key, cfg.get(key, default))
     return result

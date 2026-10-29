@@ -25,6 +25,9 @@ class SchedulingTest(unittest.TestCase):
         self.addCleanup(self.temp.cleanup)
         self.q = s.Queue(Path(self.temp.name))
         self.cfg = s.configuration(s.HERE / 'hosts.json')
+        # Fixtures use these aliases independently of the user's enabled hosts.
+        self.cfg['hosts'] = [{'ssh': host} for host in
+                             ('glockenspiel', 'marimba', 'xylophone0', 'xylophone1', 'xylophone3')]
         self.cfg.pop('shared_queue', None)
         self.cfg['max_jobs_per_gpu'] = 1
         self.cfg['gpu_memory_headroom_mib'] = 0
@@ -188,6 +191,35 @@ class SchedulingTest(unittest.TestCase):
         self.assertIn('ControlPersist=no', argv)
         self.assertIn('ControlPath=none', argv)
         self.assertEqual(json.loads(call.call_args.kwargs['input'])['command'], command)
+
+    def test_template_start_script_is_forwarded_and_status_timeout_stays_short(self):
+        cfg = dict(self.cfg, template_start_script='~/custom/start.sh')
+        self.assertEqual(s.host_request(cfg, cfg['hosts'][0]['ssh'])['template_start_script'],
+                         '~/custom/start.sh')
+        response = subprocess.CompletedProcess([], 0, '{}', '')
+        with patch.object(s.subprocess, 'run', return_value=response) as call:
+            s.remote('a', {'action': 'probe'})
+            self.assertEqual(call.call_args.kwargs['timeout'], 1900)
+            s.remote('a', {'action': 'status'})
+            self.assertEqual(call.call_args.kwargs['timeout'], 100)
+
+    def test_template_inspection_error_does_not_trigger_creation(self):
+        import remote as r
+        with patch.object(r, 'run', return_value=subprocess.CompletedProcess(
+                [], 1, '', 'permission denied')) as call:
+            with self.assertRaisesRegex(RuntimeError, 'permission denied'):
+                r.ensure_template({'container': 'test'})
+        call.assert_called_once()
+
+    def test_template_setup_failure_is_reported(self):
+        import remote as r
+        script = Path(self.temp.name) / 'setup.sh'
+        script.touch()
+        with patch.object(r, 'template_running', return_value=None), \
+             patch.object(r, 'run', return_value=subprocess.CompletedProcess(
+                 [], 1, 'setup output', 'setup failed')):
+            with self.assertRaisesRegex(RuntimeError, 'Cannot create template container'):
+                r.ensure_template(dict(container='test', template_start_script=str(script)))
 
     def test_local_status_and_queue_only_never_connect(self):
         for argv in (['status', '--local'], ['submit', '--queue-only', 'echo safe']):
@@ -697,6 +729,23 @@ class DetachedLifecycleTest(unittest.TestCase):
         operations = [json.loads(line) for line in self.docker_log.read_text().splitlines()]
         self.assertIn(['start', 'test'], operations)
         self.assertFalse(any(op[0] == 'rm' and op[-1] == 'test' for op in operations))
+
+    def test_missing_template_is_created_once_then_reused(self):
+        state = self.root / 'docker-state'
+        state.mkdir()
+        (state / 'template-missing').touch()
+        script = self.root / 'start-template.sh'
+        script.write_text('set -eu\n'
+                          'test "$1" = start\n'
+                          'printf started >> "$JOB_SCHEDULER_TEST_DOCKER_STATE/template-starts"\n'
+                          'touch "$JOB_SCHEDULER_TEST_DOCKER_STATE/template-created"\n')
+        self.req['template_start_script'] = str(script)
+        self.assertEqual(self.ns['main'](self.req)['status'], 'reserved')
+        self.assertEqual(self.wait_result()['status'], 'succeeded')
+        self.req = dict(self.req, id=uuid.uuid4().hex)
+        self.assertEqual(self.ns['main'](self.req)['status'], 'reserved')
+        self.assertEqual(self.wait_result()['status'], 'succeeded')
+        self.assertEqual((state / 'template-starts').read_text(), 'started')
 
     def test_template_stop_failure_preserves_job_exit_result(self):
         directory = self.root / 'finish-test'

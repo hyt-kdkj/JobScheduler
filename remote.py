@@ -222,8 +222,33 @@ def template_lock():
 def template_running(req):
     result = run(['docker', 'inspect', req['container']])
     if result.returncode:
+        if 'no such object:' in result.stderr.lower() or 'no such container:' in result.stderr.lower():
+            return None
         raise RuntimeError('Cannot inspect template container: ' + result.stderr.strip())
     return json.loads(result.stdout)[0].get('State', {}).get('Running', True)
+
+
+def ensure_template(req):
+    """Called with template_lock held; return whether it was already running."""
+    was_running = template_running(req)
+    if was_running is None:
+        script = Path(req.get('template_start_script',
+                              '~/workspace/V2VSimulator/docker-shell.sh')).expanduser()
+        if not script.is_file():
+            raise RuntimeError('Template container is missing and startup script was not found: '
+                               + str(script))
+        result = run(['bash', str(script), 'start'], cwd=str(script.parent), timeout=1800)
+        if result.returncode:
+            raise RuntimeError('Cannot create template container: '
+                               + (result.stderr + result.stdout)[-4000:].strip())
+        if template_running(req) is not True:
+            raise RuntimeError('Startup script did not create a running template container: '
+                               + req['container'])
+    elif not was_running:
+        result = run(['docker', 'start', req['container']])
+        if result.returncode:
+            raise RuntimeError('Cannot start template container: ' + result.stderr.strip())
+    return bool(was_running)
 
 
 def stop_template(req):
@@ -238,11 +263,7 @@ def probe(req):
     # GPU inspection uses docker exec. Temporarily restart a stopped template,
     # and serialize against workers stopping it or taking an image snapshot.
     with template_lock():
-        was_running = template_running(req)
-        if not was_running:
-            result = run(['docker', 'start', req['container']])
-            if result.returncode:
-                raise RuntimeError('Cannot start template container: ' + result.stderr.strip())
+        was_running = ensure_template(req)
         try:
             return probe_running(req)
         finally:
@@ -332,6 +353,8 @@ def runtime_image(req, template):
 
 def job_command(req):
     with template_lock():
+        if template_running(req) is None:
+            ensure_template(req)
         return job_command_locked(req)
 
 

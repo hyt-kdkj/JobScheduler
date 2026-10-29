@@ -26,6 +26,9 @@ def main():
         return 0
     if action == 'inspect':
         name = args[-1]
+        if name == 'test' and (root / 'template-missing').exists() and not (root / 'template-created').exists():
+            print('error: no such object: test', file=sys.stderr)
+            return 1
         if name == 'test':
             info = dict(Id='a' * 64, State=dict(Running=not (root / 'template-stopped').exists()),
                         Config=dict(Env=['TEST_RUNTIME=yes'], Labels={

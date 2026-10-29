@@ -115,7 +115,9 @@ exit
 python3 scheduler.py gpus
 ```
 
-既定のテンプレートは `v2vsimulator-v2v-dev-1`、作業先は `/workspace/V2VSimulator/Simulator` です。変更する場合は `hosts.json` を編集します。接続・GPU 確認に失敗したサーバーは投入先から外します。
+既定のテンプレートは `v2vsimulator-v2v-dev-1`、作業先は `/workspace/V2VSimulator/Simulator` です。変更する場合は `hosts.json` を編集します。`gpus` やジョブ投入時にテンプレートが存在しなければ、SSH 先の `~/workspace/V2VSimulator/docker-shell.sh start` を自動実行して作成・起動します。既存イメージがあれば再ビルドしません。初回の環境準備は最大30分待機します。停止済みなら `docker start` で再利用します。接続・環境準備・GPU 確認に失敗したサーバーは投入先から外します。
+
+起動スクリプトの場所が異なる場合は、`hosts.json` の共通設定またはホスト設定に `"template_start_script": "~/workspace/V2VSimulator/docker-shell.sh"` を指定してください。
 
 ### GPU の割当て
 
@@ -184,7 +186,7 @@ python3 stop_containers.py
 python3 stop_containers.py marimba xylophone1 --container v2vsimulator-v2v-dev-1
 ```
 
-従来の `remove_containers.py` も停止だけを行います。テンプレートの停止ではコンテナ ID と保存済みの環境イメージが維持されるため、毎回のビルドや環境イメージの作り直しは不要です。既に削除したテンプレートは、元のプロジェクトで一度再作成してください。元の Docker イメージが残っていれば、再ビルドは不要です。
+従来の `remove_containers.py` も停止だけを行います。テンプレートの停止ではコンテナ ID と保存済みの環境イメージが維持されるため、毎回のビルドや環境イメージの作り直しは不要です。既に削除したテンプレートは、次の GPU 確認やジョブ投入時に自動再作成します。元の Docker イメージが残っていれば、再ビルドは不要です。
 
 ジョブごとに新しいコンテナを作り、終了後に削除します。正常終了・異常終了・キャンセル時にはテンプレート用コンテナも停止しますが、削除しません。他の実行中ジョブは専用コンテナで動作を続けます。停止済みテンプレートは GPU 確認時に一時起動して元の停止状態に戻し、次のジョブは初回に保存した環境イメージを再利用します。初回準備には数分以上かかる場合があります。テンプレート由来の Compose 管理ラベルは無効にし、元プロジェクトの Compose 操作との干渉を防ぎます。
 
