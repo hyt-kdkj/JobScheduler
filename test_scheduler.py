@@ -554,6 +554,7 @@ class DetachedLifecycleTest(unittest.TestCase):
                 if self.docker_log.exists():
                     self.assertFalse((self.root / 'docker-state/containers' /
                                       ('job-scheduler-' + self.req['id'])).exists())
+                    self.assertTrue((self.root / 'docker-state/template-stopped').exists())
                 return data
             time.sleep(0.05)
         self.fail('Detached worker did not finish: ' + repr(data))
@@ -684,6 +685,31 @@ class DetachedLifecycleTest(unittest.TestCase):
         self.assertIn('job-scheduler.id=' + self.req['id'], command)
         self.assertIn('CUDA_VISIBLE_DEVICES=GPU-test', command)
         self.assertIn(f'type=bind,src={self.root},dst=/workspace/V2VSimulator', command)
+
+    def test_stopped_template_can_probe_and_launch_the_next_job(self):
+        self.ns['main'](self.req)
+        self.assertEqual(self.wait_result()['status'], 'succeeded')
+        self.assertEqual(len(self.ns['main'](dict(self.req, action='probe'))['gpus']), 2)
+        self.assertTrue((self.root / 'docker-state/template-stopped').exists())
+        self.req = dict(self.req, id=uuid.uuid4().hex)
+        self.assertEqual(self.ns['main'](self.req)['status'], 'reserved')
+        self.assertEqual(self.wait_result()['status'], 'succeeded')
+        operations = [json.loads(line) for line in self.docker_log.read_text().splitlines()]
+        self.assertIn(['start', 'test'], operations)
+        self.assertFalse(any(op[0] == 'rm' and op[-1] == 'test' for op in operations))
+
+    def test_template_stop_failure_preserves_job_exit_result(self):
+        directory = self.root / 'finish-test'
+        directory.mkdir()
+        (directory / 'request.json').write_text(json.dumps(dict(self.req, job_container='owned')))
+        data = dict(status='succeeded', exit_code=0, session='unused')
+        with patch.dict(self.ns, stop_template=lambda req: (_ for _ in ()).throw(
+                RuntimeError('stop failed')), tmux=lambda args: None, run=lambda args: None):
+            self.ns['finish_job'](directory, data)
+        saved = json.loads((directory / 'status.json').read_text())
+        self.assertEqual(saved['status'], 'succeeded')
+        self.assertEqual(saved['exit_code'], 0)
+        self.assertEqual(saved['template_cleanup_error'], 'stop failed')
     def test_san_queue_claim_prevents_two_pcs_dispatching_same_job(self):
         job = dict(id=self.req['id'], created=time.time(), status='queued',
                    command='echo shared', name='shared', requested_host=None, min_free_mib=2048)
@@ -776,7 +802,7 @@ class DetachedLifecycleTest(unittest.TestCase):
             return subprocess.CompletedProcess(args, 0, out, '')
         request = dict(self.req, max_jobs_per_gpu=2, gpu_memory_headroom_mib=1024)
         with patch.dict(self.ns, run=response, reservations=lambda: {'GPU-test': [job]}):
-            gpu = self.ns['probe'](request)['gpus'][0]
+            gpu = self.ns['probe_running'](request)['gpus'][0]
         self.assertEqual(gpu['occupied_slots'], 2)
         self.assertEqual(gpu['external_processes'], 1)
         self.assertEqual(gpu['pending_mib'], 1024)
@@ -788,7 +814,7 @@ class DetachedLifecycleTest(unittest.TestCase):
                 result.stdout = 'GPU-test, 111, 1024\n'
             return result
         with patch.dict(self.ns, run=managed_only, reservations=lambda: {'GPU-test': [job]}):
-            gpu = self.ns['probe'](request)['gpus'][0]
+            gpu = self.ns['probe_running'](request)['gpus'][0]
         self.assertEqual(gpu['occupied_slots'], 1)
         self.assertTrue(gpu['accepting_jobs'])
 

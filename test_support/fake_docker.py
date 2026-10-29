@@ -27,7 +27,8 @@ def main():
     if action == 'inspect':
         name = args[-1]
         if name == 'test':
-            info = dict(Id='a' * 64, Config=dict(Env=['TEST_RUNTIME=yes'], Labels={
+            info = dict(Id='a' * 64, State=dict(Running=not (root / 'template-stopped').exists()),
+                        Config=dict(Env=['TEST_RUNTIME=yes'], Labels={
                             'com.docker.compose.project': 'v2vsimulator',
                             'com.docker.compose.service': 'v2v-dev',
                             'com.docker.compose.container-number': '1'}),
@@ -49,6 +50,12 @@ def main():
         print('PID')
         print(json.loads(path.read_text())['pid'])
         return 0
+    if action == 'start' and args[-1] == 'test':
+        (root / 'template-stopped').unlink(missing_ok=True)
+        return 0
+    if action == 'stop' and args[-1] == 'test':
+        (root / 'template-stopped').touch()
+        return 0
     if action in ('stop', 'rm'):
         path = containers / args[-1]
         if not path.exists():
@@ -66,6 +73,9 @@ def main():
         return 0
     if action not in ('exec', 'run'):
         raise ValueError(action)
+    if action == 'exec' and (root / 'template-stopped').exists():
+        print('template container is stopped', file=sys.stderr)
+        return 1
     env, cwd, name, labels = os.environ.copy(), None, None, {}
     while args and args[0].startswith('--'):
         key = args.pop(0)

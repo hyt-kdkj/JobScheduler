@@ -160,7 +160,7 @@ def apply_result(job, data):
         job.update(status='unknown', error='Remote job record is missing; inspect manually')
         return
     for key in ('status', 'exit_code', 'started', 'finished', 'session', 'error',
-                'window_id', 'job_container', 'cleanup_error'):
+                'window_id', 'job_container', 'cleanup_error', 'template_cleanup_error'):
         if key in data:
             job[key] = data[key]
     for key in ('host', 'gpu', 'gpu_index', 'gpu_name', 'cancel_requested'):
@@ -389,7 +389,7 @@ def show_jobs(jobs, include_cancelled=True):
               f'{j.get("result_sync", {}).get("status", "-"):9} '
               f'{job_agents(j):24} '
               f'{j.get("name") or j["command"]}')
-        for key in ('error', 'connection_error', 'cleanup_error'):
+        for key in ('error', 'connection_error', 'cleanup_error', 'template_cleanup_error'):
             if j.get(key):
                 print(f'  {key}: {j[key]}')
         if j.get('result_sync', {}).get('error'):

@@ -211,7 +211,48 @@ def reservations():
     return result
 
 
+@contextlib.contextmanager
+def template_lock():
+    root_dir().mkdir(parents=True, exist_ok=True, mode=0o700)
+    with (root_dir() / 'template.lock').open('a') as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        yield
+
+
+def template_running(req):
+    result = run(['docker', 'inspect', req['container']])
+    if result.returncode:
+        raise RuntimeError('Cannot inspect template container: ' + result.stderr.strip())
+    return json.loads(result.stdout)[0].get('State', {}).get('Running', True)
+
+
+def stop_template(req):
+    with template_lock():
+        if template_running(req):
+            result = run(['docker', 'stop', '--time', '10', req['container']])
+            if result.returncode:
+                raise RuntimeError('Cannot stop template container: ' + result.stderr.strip())
+
+
 def probe(req):
+    # GPU inspection uses docker exec. Temporarily restart a stopped template,
+    # and serialize against workers stopping it or taking an image snapshot.
+    with template_lock():
+        was_running = template_running(req)
+        if not was_running:
+            result = run(['docker', 'start', req['container']])
+            if result.returncode:
+                raise RuntimeError('Cannot start template container: ' + result.stderr.strip())
+        try:
+            return probe_running(req)
+        finally:
+            if not was_running:
+                result = run(['docker', 'stop', '--time', '10', req['container']])
+                if result.returncode:
+                    raise RuntimeError('Cannot stop template container: ' + result.stderr.strip())
+
+
+def probe_running(req):
     query = ('nvidia-smi --query-gpu=index,uuid,name,memory.total,memory.used,'
              'utilization.gpu --format=csv,noheader,nounits')
     result = run(docker_command(req, query))
@@ -290,6 +331,11 @@ def runtime_image(req, template):
 
 
 def job_command(req):
+    with template_lock():
+        return job_command_locked(req)
+
+
+def job_command_locked(req):
     inspected = run(['docker', 'inspect', req['container']])
     if inspected.returncode:
         raise RuntimeError(inspected.stderr.strip())
@@ -475,6 +521,14 @@ def watch_cancel(req, directory, stopped):
 
 
 def finish_job(directory, data):
+    if data['status'] in ('succeeded', 'failed', 'cancelled'):
+        try:
+            req = json.loads((directory / 'request.json').read_text())
+            if req.get('job_container'):
+                stop_template(req)
+        except Exception as exc:
+            # Template cleanup must not change the job's actual exit result.
+            data['template_cleanup_error'] = str(exc)
     # Persist the result first: killing our own tmux session can terminate us.
     save(directory / 'status.json', data)
     if data['status'] in ('succeeded', 'failed', 'cancelled'):
