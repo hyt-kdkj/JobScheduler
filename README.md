@@ -171,20 +171,20 @@ python3 scheduler.py export --refresh  # サーバーの最新状態を取得し
 
 ## コンテナと tmux
 
-指定した SSH 先のコンテナを一括削除するには、以下を実行します。既定の対象は `marimba`・`xylophone1`・`xylophone3` の `v2vsimulator-v2v-dev-1` です。実行中の場合も停止・削除します。既に存在しない場合は成功扱いとし、一部のサーバーで失敗しても残りを処理します。
+指定した SSH 先のテンプレートコンテナを一括停止するには、以下を実行します。既定の対象は `glockenspiel`・`marimba`・`xylophone1`・`xylophone3` の `v2vsimulator-v2v-dev-1` です。停止後もコンテナを保持して再利用します。既に停止済み・存在しない場合は処理不要として扱い、一部のサーバーで失敗しても残りを処理します。
 
 ```bash
 # 対象の確認だけ（SSH 接続なし）
-python3 remove_containers.py --dry-run
+python3 stop_containers.py --dry-run
 
-# 既定の3台から削除
-python3 remove_containers.py
+# 既定の4台で停止（削除しない）
+python3 stop_containers.py
 
 # サーバーやコンテナ名を指定
-python3 remove_containers.py marimba xylophone1 --container v2vsimulator-v2v-dev-1
+python3 stop_containers.py marimba xylophone1 --container v2vsimulator-v2v-dev-1
 ```
 
-削除したテンプレートは、次のジョブ投入前に元のプロジェクトで再作成してください。
+従来の `remove_containers.py` も停止だけを行います。テンプレートの停止ではコンテナ ID と保存済みの環境イメージが維持されるため、毎回のビルドや環境イメージの作り直しは不要です。既に削除したテンプレートは、元のプロジェクトで一度再作成してください。元の Docker イメージが残っていれば、再ビルドは不要です。
 
 ジョブごとに新しいコンテナを作り、終了後に削除します。正常終了・異常終了・キャンセル時にはテンプレート用コンテナも停止しますが、削除しません。他の実行中ジョブは専用コンテナで動作を続けます。停止済みテンプレートは GPU 確認時に一時起動して元の停止状態に戻し、次のジョブは初回に保存した環境イメージを再利用します。初回準備には数分以上かかる場合があります。テンプレート由来の Compose 管理ラベルは無効にし、元プロジェクトの Compose 操作との干渉を防ぎます。
 
