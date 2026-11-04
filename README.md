@@ -10,7 +10,7 @@
 cd ~/workspace/JobScheduler
 
 # 一括投入：highway / urban × step 10〜80 の16件
-python3 scheduler.py submit-batch jobs/train_transformer.json
+python3 scheduler.py submit-batch jobs/V2VSimulator/train_transformer.json
 
 # 状態を確認（新しいジョブは開始しない）
 python3 scheduler.py status
@@ -28,10 +28,10 @@ python3 scheduler.py logs --running --lines 1000
 
 ```bash
 # 内容確認だけ。登録・SSH 接続なし
-python3 scheduler.py submit-batch jobs/train_lstm.json --dry-run
+python3 scheduler.py submit-batch jobs/V2VSimulator/train_lstm.json --dry-run
 
 # ローカルのキューに登録だけ。次の dispatch で共有・投入される
-python3 scheduler.py submit-batch jobs/train_lstm.json --queue-only
+python3 scheduler.py submit-batch jobs/V2VSimulator/train_lstm.json --queue-only
 
 # 1件だけ投入
 python3 scheduler.py submit --name highway_4_30 \
@@ -39,6 +39,36 @@ python3 scheduler.py submit --name highway_4_30 \
 ```
 
 `--queue-only` でも、次の定期実行では投入対象になります。
+
+### V2VSimulator-revision を使う
+
+既定のプロジェクトは `V2VSimulator` です。`--project V2VSimulator-revision` を指定すると、SSH 先の `~/workspace/V2VSimulator-revision` を使って実行します。
+
+```bash
+# V2VSimulator-revision 用のテンプレート作成・GPU 確認
+python3 scheduler.py gpus --project V2VSimulator-revision
+
+# 1件を投入
+python3 scheduler.py submit --project V2VSimulator-revision --name revision_train \
+  'python3 train_transformer.py --scenario highway --method 4 --step 30'
+
+# 既存のバッチ定義を V2VSimulator-revision で実行する場合
+python3 scheduler.py submit-batch jobs/V2VSimulator-revision/train_transformer.json --dry-run
+python3 scheduler.py submit-batch jobs/V2VSimulator-revision/train_transformer.json
+
+# 両プロジェクトの待機ジョブを処理・一覧表示
+python3 scheduler.py dispatch
+python3 scheduler.py status
+
+# V2VSimulator-revision 用のテンプレートを一括停止する場合
+python3 stop_containers.py --container v2vsimulator-revision-v2v-dev-1
+```
+
+各 SSH 先に `~/workspace/V2VSimulator-revision` とその `docker-shell.sh` を用意してください。ソースコードの自動転送は行いません。テンプレートは `v2vsimulator-revision-v2v-dev-1` で、なければそのプロジェクトの起動スクリプトで作成します。コンテナ内の作業先は、両プロジェクトとも `/workspace/V2VSimulator/Simulator` ですが、マウントするホスト側のソースはそれぞれ異なります。
+
+プロジェクトごとのコンテナ名・作業先・起動スクリプトは `hosts.json` の `projects` に定義しています。新規ジョブは投入時の環境設定を保存し、共有キュー経由の別 PC や定期実行でも同じ環境で起動します。GPU の予約枠と VRAM はプロジェクト間で共通管理します。`status` の `PROJECT` 列で対象を確認できます。対応前に登録したジョブの列は `-` と表示され、従来の実行設定を使います。
+
+バッチ JSON の `defaults` または各ジョブにも `"project": "V2VSimulator-revision"` を指定できます。優先順位は、コマンドの `--project` → 各ジョブの `project` → `defaults.project` → `hosts.json` の `default_project` です。
 
 ### 状態・ログ・キャンセル
 
@@ -102,6 +132,7 @@ python3 scheduler.py submit --name highway_4_30 \
 - ローカル：Python 3.9 以降と SSH。`hosts.json` の `glockenspiel`、`marimba`、`xylophone0`、`xylophone1`、`xylophone3` にパスワード入力なしで接続できること。
 - 各サーバー：Docker、稼働する NVIDIA ドライバ、tmux、Python 3.9 以降。
 - V2VSimulator 本体：サーバー側の SAN 上の `~/workspace/V2VSimulator` に配置。ローカルからの自動転送や Git pull は行いません。
+- V2VSimulator-revision を使う場合：同様にサーバー側の `~/workspace/V2VSimulator-revision` に配置。
 
 使用する各サーバーでテンプレート用コンテナを準備します。
 

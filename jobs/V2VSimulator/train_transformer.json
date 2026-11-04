@@ -1,4 +1,7 @@
 {
+  "defaults": {
+    "project": "V2VSimulator"
+  },
   "jobs": [
     {
       "name": "train_transformer_{scenario}_4_{step}",

@@ -132,7 +132,7 @@ def shared_record(path):
 def shared_sync(jobs):
     with shared_lock() as directory:
         allowed = {'id', 'command', 'name', 'created', 'status', 'requested_host',
-                   'min_free_mib', 'batch_id', 'batch_file'}
+                   'min_free_mib', 'batch_id', 'batch_file', 'project', 'execution'}
         for job in jobs:
             job_path(job['id'])  # Validate before using the ID as a filename.
             path = directory / (job['id'] + '.json')

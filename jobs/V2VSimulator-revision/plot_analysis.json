@@ -1,4 +1,7 @@
 {
+  "defaults": {
+    "project": "V2VSimulator-revision"
+  },
   "jobs": [
     {
       "name": "plot_transformer_highway_{method}_steps10to80_{num_vehicles}_analysis",

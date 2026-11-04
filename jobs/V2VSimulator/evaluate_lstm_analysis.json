@@ -1,4 +1,7 @@
 {
+  "defaults": {
+    "project": "V2VSimulator"
+  },
   "jobs": [
     {
       "name": "eval_lstm_highway_{method}_{step}_{num_vehicles}_analysis",

@@ -29,13 +29,17 @@ def main():
         if name == 'test' and (root / 'template-missing').exists() and not (root / 'template-created').exists():
             print('error: no such object: test', file=sys.stderr)
             return 1
-        if name == 'test':
-            info = dict(Id='a' * 64, State=dict(Running=not (root / 'template-stopped').exists()),
+        if name in ('test', 'test-worktree3'):
+            alternate = name == 'test-worktree3'
+            marker = 'worktree3-template-stopped' if alternate else 'template-stopped'
+            source = root.parent / 'V2VSimulator-division' if alternate else root.parent
+            info = dict(Id=('b' if alternate else 'a') * 64,
+                        State=dict(Running=not (root / marker).exists()),
                         Config=dict(Env=['TEST_RUNTIME=yes'], Labels={
                             'com.docker.compose.project': 'v2vsimulator',
                             'com.docker.compose.service': 'v2v-dev',
                             'com.docker.compose.container-number': '1'}),
-                        Mounts=[dict(Type='bind', Source=str(root.parent),
+                        Mounts=[dict(Type='bind', Source=str(source),
                                      Destination='/workspace/V2VSimulator', RW=True)],
                         HostConfig=dict(Devices=[], DeviceRequests=None))
         elif (containers / name).exists():
@@ -53,11 +57,13 @@ def main():
         print('PID')
         print(json.loads(path.read_text())['pid'])
         return 0
-    if action == 'start' and args[-1] == 'test':
-        (root / 'template-stopped').unlink(missing_ok=True)
+    if action == 'start' and args[-1] in ('test', 'test-worktree3'):
+        marker = 'template-stopped' if args[-1] == 'test' else 'worktree3-template-stopped'
+        (root / marker).unlink(missing_ok=True)
         return 0
-    if action == 'stop' and args[-1] == 'test':
-        (root / 'template-stopped').touch()
+    if action == 'stop' and args[-1] in ('test', 'test-worktree3'):
+        marker = 'template-stopped' if args[-1] == 'test' else 'worktree3-template-stopped'
+        (root / marker).touch()
         return 0
     if action in ('stop', 'rm'):
         path = containers / args[-1]
@@ -76,7 +82,8 @@ def main():
         return 0
     if action not in ('exec', 'run'):
         raise ValueError(action)
-    if action == 'exec' and (root / 'template-stopped').exists():
+    marker = 'worktree3-template-stopped' if 'test-worktree3' in args else 'template-stopped'
+    if action == 'exec' and (root / marker).exists():
         print('template container is stopped', file=sys.stderr)
         return 1
     env, cwd, name, labels = os.environ.copy(), None, None, {}

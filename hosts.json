@@ -1,11 +1,31 @@
 {
   "container": "v2vsimulator-v2v-dev-1",
   "workdir": "/workspace/V2VSimulator/Simulator",
+  "default_project": "V2VSimulator",
+  "projects": {
+    "V2VSimulator": {
+      "container": "v2vsimulator-v2v-dev-1",
+      "workdir": "/workspace/V2VSimulator/Simulator",
+      "template_start_script": "~/workspace/V2VSimulator/docker-shell.sh"
+    },
+    "V2VSimulator-division": {
+      "container": "v2vsimulator-division-v2v-dev-1",
+      "workdir": "/workspace/V2VSimulator/Simulator",
+      "template_start_script": "~/workspace/V2VSimulator-division/docker-shell.sh"
+    },
+    "V2VSimulator-revision": {
+      "container": "v2vsimulator-revision-v2v-dev-1",
+      "workdir": "/workspace/V2VSimulator/Simulator",
+      "template_start_script": "~/workspace/V2VSimulator-revision/docker-shell.sh"
+    }
+  },
   "idle_max_used_mib": 512,
   "idle_max_utilization": 10,
   "max_jobs_per_gpu": 2,
   "gpu_memory_headroom_mib": 1024,
-  "shared_queue": {"host": "glockenspiel"},
+  "shared_queue": {
+    "host": "glockenspiel"
+  },
   "results_sync": null,
   "priorities": {
     "RTX 5000 Ada": 100,
@@ -14,10 +34,20 @@
     "P100": 30
   },
   "hosts": [
-    {"ssh": "glockenspiel"},
-    {"ssh": "marimba"},
-    {"ssh": "xylophone0"},
-    {"ssh": "xylophone1"},
-    {"ssh": "xylophone3"}
+    {
+      "ssh": "glockenspiel"
+    },
+    {
+      "ssh": "marimba"
+    },
+    {
+      "ssh": "xylophone0"
+    },
+    {
+      "ssh": "xylophone1"
+    },
+    {
+      "ssh": "xylophone3"
+    }
   ]
 }

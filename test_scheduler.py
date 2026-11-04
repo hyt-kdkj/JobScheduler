@@ -324,6 +324,76 @@ class SchedulingTest(unittest.TestCase):
             self.q.add_many(s.batch_jobs(self.cfg, path))
         self.assertEqual(self.q.all(), [])
 
+    def test_project_environment_survives_later_configuration_changes(self):
+        job = s.new_job(self.cfg, dict(command='echo worktree', project='V2VSimulator-division'))
+        job.update(host='marimba', gpu='GPU-a')
+        cfg = copy.deepcopy(self.cfg)
+        cfg['projects'].clear()
+        cfg['container'] = 'different-template'
+        cfg['runtime_image'] = 'different-runtime'
+        cfg['hosts'][1]['container'] = 'host-override'
+        request = s.launch_request(cfg, job)
+        self.assertEqual(request['container'], 'v2vsimulator-division-v2v-dev-1')
+        self.assertEqual(request['template_start_script'], '~/workspace/V2VSimulator-division/docker-shell.sh')
+        self.assertEqual(request['workdir'], '/workspace/V2VSimulator/Simulator')
+        self.assertNotIn('runtime_image', request)
+
+    def test_project_defaults_and_unknown_project(self):
+        job = s.new_job(self.cfg, dict(command='echo original'))
+        self.assertEqual(job['project'], 'V2VSimulator')
+        self.assertEqual(job['execution']['marimba']['container'], 'v2vsimulator-v2v-dev-1')
+        for project in ('unknown', '', ['V2VSimulator-division']):
+            with self.subTest(project=project), self.assertRaises(ValueError):
+                s.new_job(self.cfg, dict(command='echo invalid', project=project))
+
+    def test_batch_project_defaults_and_cli_override(self):
+        path = Path(self.temp.name) / 'projects.json'
+        path.write_text(json.dumps(dict(defaults=dict(project='V2VSimulator-division'), jobs=[
+            dict(command='echo worktree'), dict(command='echo original', project='V2VSimulator')])))
+        self.assertEqual([j['project'] for j in s.batch_jobs(self.cfg, path)],
+                         ['V2VSimulator-division', 'V2VSimulator'])
+        self.assertEqual([j['project'] for j in s.batch_jobs(self.cfg, path, 'V2VSimulator-division')],
+                         ['V2VSimulator-division', 'V2VSimulator-division'])
+
+    def test_project_submit_queue_only_records_environment_without_ssh(self):
+        argv = ['scheduler.py', '--state-dir', self.temp.name, 'submit',
+                '--project', 'V2VSimulator-division', '--queue-only', 'echo worktree']
+        with patch.object(sys, 'argv', argv), patch.object(s, 'remote') as connect, \
+             contextlib.redirect_stdout(io.StringIO()):
+            s.main()
+        connect.assert_not_called()
+        self.assertEqual(self.q.all()[0]['project'], 'V2VSimulator-division')
+
+    def test_dispatch_mixed_projects_keeps_environment_and_gpu_accounting(self):
+        cfg = dict(self.cfg, hosts=[{'ssh': 'marimba'}], max_jobs_per_gpu=2)
+        jobs = [s.new_job(cfg, dict(command='echo '+project, project=project))
+                for project in ('V2VSimulator-division', 'V2VSimulator', 'V2VSimulator-division')]
+        self.q.add_many(jobs)
+        launched = []
+        probes = []
+
+        def reply(host, request):
+            if request['action'] == 'launch':
+                launched.append(request['container'])
+                return {'status': 'reserved'}
+            probes.append(request['container'])
+            return {'gpus': [self.gpu(host=host, accepting_jobs=len(launched) < 2,
+                                     available_mib=10000, occupied_slots=len(launched))]}
+
+        with patch.object(s, 'remote', side_effect=reply), contextlib.redirect_stdout(io.StringIO()):
+            s.dispatch(cfg, self.q)
+        self.assertEqual(launched, ['v2vsimulator-division-v2v-dev-1', 'v2vsimulator-v2v-dev-1'])
+        self.assertIn('v2vsimulator-division-v2v-dev-1', probes)
+        self.assertIn('v2vsimulator-v2v-dev-1', probes)
+        self.assertEqual(self.q.get(jobs[-1]['id'])['status'], 'queued')
+
+    def test_project_gpus_selects_template(self):
+        argv = ['scheduler.py', '--state-dir', self.temp.name, 'gpus', '--project', 'V2VSimulator-division']
+        with patch.object(sys, 'argv', argv), patch.object(s, 'inventory', return_value={}) as probe:
+            s.main()
+        cfg = probe.call_args.args[0]
+        self.assertEqual(s.host_request(cfg, 'marimba')['container'], 'v2vsimulator-division-v2v-dev-1')
+
     def test_batch_dry_run_never_submits_or_connects(self):
         path = Path(self.temp.name) / 'jobs.json'
         path.write_text('[{"command": "echo preview"}]')
@@ -586,7 +656,9 @@ class DetachedLifecycleTest(unittest.TestCase):
                 if self.docker_log.exists():
                     self.assertFalse((self.root / 'docker-state/containers' /
                                       ('job-scheduler-' + self.req['id'])).exists())
-                    self.assertTrue((self.root / 'docker-state/template-stopped').exists())
+                    template_marker = ('worktree3-template-stopped'
+                                       if self.req['container'] == 'test-worktree3' else 'template-stopped')
+                    self.assertTrue((self.root / 'docker-state' / template_marker).exists())
                 return data
             time.sleep(0.05)
         self.fail('Detached worker did not finish: ' + repr(data))
@@ -717,6 +789,41 @@ class DetachedLifecycleTest(unittest.TestCase):
         self.assertIn('job-scheduler.id=' + self.req['id'], command)
         self.assertIn('CUDA_VISIBLE_DEVICES=GPU-test', command)
         self.assertIn(f'type=bind,src={self.root},dst=/workspace/V2VSimulator', command)
+
+    def test_second_project_uses_its_own_template_mount_and_runtime(self):
+        self.ns['main'](self.req)
+        self.assertEqual(self.wait_result()['status'], 'succeeded')
+        worktree = self.root / 'V2VSimulator-division'
+        worktree.mkdir()
+        (worktree / 'project.txt').write_text('from-worktree3')
+        self.req = dict(self.req, id=uuid.uuid4().hex, container='test-worktree3',
+                        workdir=str(worktree), command='cat project.txt')
+        self.assertEqual(self.ns['main'](self.req)['status'], 'reserved')
+        self.assertEqual(self.wait_result()['status'], 'succeeded')
+        log = self.ns['main'](dict(action='logs', id=self.req['id']))['log']
+        self.assertIn('from-worktree3', log)
+        operations = [json.loads(line) for line in self.docker_log.read_text().splitlines()]
+        runs = [op for op in operations if op[0] == 'run']
+        self.assertIn(f'type=bind,src={worktree},dst=/workspace/V2VSimulator', runs[-1])
+        commits = [op for op in operations if op[0] == 'commit']
+        self.assertEqual({op[-2] for op in commits}, {'test', 'test-worktree3'})
+        self.assertNotEqual(commits[0][-1], commits[1][-1])
+
+    def test_shared_project_job_keeps_execution_settings_on_another_pc(self):
+        cfg = s.configuration(s.HERE / 'hosts.json')
+        original = s.Queue(self.root / 'original-pc')
+        other = s.Queue(self.root / 'other-pc')
+        job = s.new_job(cfg, dict(command='echo shared-worktree', project='V2VSimulator-division'))
+        original.put(job)
+        with patch.object(s, 'remote', side_effect=lambda host, req: self.ns['main'](req)):
+            s.refresh_shared(cfg, original, publish=True)
+            s.refresh_shared(cfg, other)
+        imported = other.get(job['id'])
+        self.assertEqual(imported['project'], 'V2VSimulator-division')
+        self.assertEqual(imported['execution'], job['execution'])
+        cfg['projects'].clear()
+        imported.update(host='marimba', gpu='GPU-test')
+        self.assertEqual(s.launch_request(cfg, imported)['container'], 'v2vsimulator-division-v2v-dev-1')
 
     def test_stopped_template_can_probe_and_launch_the_next_job(self):
         self.ns['main'](self.req)

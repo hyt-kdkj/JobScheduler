@@ -1,4 +1,7 @@
 {
+  "defaults": {
+    "project": "V2VSimulator"
+  },
   "jobs": [
     {
       "name": "plot_transformer4_lstm1_highway_steps10to80_{num_vehicles}",

@@ -1,6 +1,13 @@
 # Gitで管理するジョブ定義
 
-ジョブ定義は次の11ファイルです。`JobScheduler/`内で実行します。
+ジョブ定義は `jobs/V2VSimulator/` と `jobs/V2VSimulator-revision/` に分けています。各フォルダに以下の11ファイルを配置しています。`JobScheduler/` 内で実行します。
+
+各 JSON の `defaults.project` に対象プロジェクトを設定しているため、ファイルを指定するだけで対応する環境に投入できます。revision 側は既存のジョブ定義を複製したものです。コマンドやパラメータは各フォルダで個別に変更できます。
+
+```bash
+python3 scheduler.py submit-batch jobs/V2VSimulator/train_transformer.json --dry-run
+python3 scheduler.py submit-batch jobs/V2VSimulator-revision/train_transformer.json --dry-run
+```
 
 | ファイル | 内容 | ジョブ数 |
 |---|---|---:|
@@ -24,21 +31,21 @@
 
 ```bash
 # 内容確認（登録・SSH接続なし）
-python3 scheduler.py submit-batch jobs/plot.json --dry-run
-python3 scheduler.py submit-batch jobs/plot_with_lstm.json --dry-run
-python3 scheduler.py submit-batch jobs/plot_analysis.json --dry-run
-python3 scheduler.py submit-batch jobs/plot_with_lstm_analysis.json --dry-run
+python3 scheduler.py submit-batch jobs/V2VSimulator/plot.json --dry-run
+python3 scheduler.py submit-batch jobs/V2VSimulator/plot_with_lstm.json --dry-run
+python3 scheduler.py submit-batch jobs/V2VSimulator/plot_analysis.json --dry-run
+python3 scheduler.py submit-batch jobs/V2VSimulator/plot_with_lstm_analysis.json --dry-run
 
 # 学習・評価・描画の投入例
-python3 scheduler.py submit-batch jobs/train_transformer.json
-python3 scheduler.py submit-batch jobs/evaluate_transformer.json
-python3 scheduler.py submit-batch jobs/evaluate_transformer_analysis.json
+python3 scheduler.py submit-batch jobs/V2VSimulator/train_transformer.json
+python3 scheduler.py submit-batch jobs/V2VSimulator/evaluate_transformer.json
+python3 scheduler.py submit-batch jobs/V2VSimulator/evaluate_transformer_analysis.json
 # LSTMなし：通常評価 / 詳細解析
-python3 scheduler.py submit-batch jobs/plot.json
-python3 scheduler.py submit-batch jobs/plot_analysis.json
+python3 scheduler.py submit-batch jobs/V2VSimulator/plot.json
+python3 scheduler.py submit-batch jobs/V2VSimulator/plot_analysis.json
 # LSTMあり：通常評価 / 詳細解析
-python3 scheduler.py submit-batch jobs/plot_with_lstm.json
-python3 scheduler.py submit-batch jobs/plot_with_lstm_analysis.json
+python3 scheduler.py submit-batch jobs/V2VSimulator/plot_with_lstm.json
+python3 scheduler.py submit-batch jobs/V2VSimulator/plot_with_lstm_analysis.json
 ```
 
 ジョブ名には手法名を含め、通常評価と詳細解析を区別します。登録済みジョブの手法は`status`の`AGENTS`列でも確認できます。定義ファイルの整理は登録済み・実行中のジョブには影響しません。
@@ -52,6 +59,6 @@ python3 scheduler.py submit-batch jobs/plot_with_lstm_analysis.json
 `evaluate_transformer_feature_ablation.json` は highway 120・360台、urban 200・500台 × step 10・20・30 の12ジョブです。highway は120台で学習したモデル、urban は200台で学習したモデルを使用します。通常入力＋5特徴量の個別ゼロ置換を各15 seedで比較し、結果は `save_results/evaluation/` 以下の `feature_ablation/` に `summary.csv`・`per_seed.csv`・`manifest.json` として保存されます。これはPERなどの性能変化による比較で、Q値への直接の寄与率ではありません。
 
 ```bash
-python3 scheduler.py submit-batch jobs/evaluate_transformer_feature_ablation.json --dry-run
-python3 scheduler.py submit-batch jobs/evaluate_transformer_feature_ablation.json
+python3 scheduler.py submit-batch jobs/V2VSimulator/evaluate_transformer_feature_ablation.json --dry-run
+python3 scheduler.py submit-batch jobs/V2VSimulator/evaluate_transformer_feature_ablation.json
 ```

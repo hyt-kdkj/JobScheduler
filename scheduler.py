@@ -19,6 +19,7 @@ import uuid
 
 HERE = Path(__file__).resolve().parent
 TERMINAL = {'succeeded', 'failed', 'cancelled'}
+ENVIRONMENT_KEYS = ('container', 'workdir', 'template_start_script', 'runtime_image')
 
 
 def remote(host, request):
@@ -67,7 +68,35 @@ def configuration(path):
         margin = entry.get('gpu_memory_headroom_mib', cfg.get('gpu_memory_headroom_mib', 0))
         if not isinstance(margin, (int, float)) or not math.isfinite(margin) or margin < 0:
             raise ValueError('gpu_memory_headroom_mib must be nonnegative')
+    projects = cfg.get('projects', {})
+    if not isinstance(projects, dict):
+        raise ValueError('projects must be an object')
+    for name, settings in projects.items():
+        if not isinstance(settings, dict) or set(settings) - set(ENVIRONMENT_KEYS):
+            raise ValueError('Invalid project settings: ' + name)
+        if any(not isinstance(value, str) or not value.strip() for value in settings.values()):
+            raise ValueError('Project settings must be nonempty strings: ' + name)
+    if cfg.get('default_project') is not None and cfg['default_project'] not in projects:
+        raise ValueError('Unknown default_project')
     return cfg
+
+
+def project_configuration(cfg, project):
+    if project is None:
+        return cfg
+    if not isinstance(project, str) or project not in cfg.get('projects', {}):
+        raise ValueError('Unknown project: ' + str(project))
+    settings = cfg['projects'][project]
+    return dict(cfg, **settings, hosts=[dict(host, **settings) for host in cfg['hosts']])
+
+
+def job_configuration(cfg, job):
+    # Saved paths survive a later dispatch from cron or another PC/configuration.
+    if 'execution' in job:
+        hosts = [dict(host, **job['execution'][host['ssh']]) for host in cfg['hosts']
+                 if host['ssh'] in job['execution']]
+        return dict(cfg, hosts=hosts)
+    return project_configuration(cfg, job.get('project'))
 
 
 def host_request(cfg, host):
@@ -177,7 +206,7 @@ def requeue(job):
 
 
 def launch_request(cfg, job):
-    req = dict(host_request(cfg, job['host']), action='launch', id=job['id'],
+    req = dict(host_request(job_configuration(cfg, job), job['host']), action='launch', id=job['id'],
                 command=job['command'], gpu=job['gpu'], min_free_mib=job['min_free_mib'])
     if cfg.get('shared_queue'):
         req.update(shared_queue=True, host=job['host'], client_job=job)
@@ -247,13 +276,22 @@ def dispatch(cfg, queue):
     reconcile(cfg, queue)
     if not any(j['status'] == 'queued' for j in queue.all()):
         return
-    inv = inventory(cfg)
-    for host, data in inv.items():
-        if 'error' in data:
-            print(f'[{host}] unavailable: {data["error"]}', file=sys.stderr, flush=True)
+    inventories = {}
     for job in queue.all():
         if job['status'] != 'queued':
             continue
+        execution_cfg = job_configuration(cfg, job)
+        key = json.dumps(execution_cfg['hosts'], sort_keys=True)
+        if not execution_cfg['hosts']:
+            print(f'[{job["id"][:8]}] no configured hosts match the saved execution environment',
+                  file=sys.stderr, flush=True)
+            continue
+        if key not in inventories:
+            inventories[key] = inventory(execution_cfg)
+            for host, data in inventories[key].items():
+                if 'error' in data:
+                    print(f'[{host}] unavailable: {data["error"]}', file=sys.stderr, flush=True)
+        inv = inventories[key]
         for gpu in candidates(cfg, inv, job):
             # Persist the target before sending anything to the server.
             job.update(status='dispatching', host=gpu['host'], gpu=gpu['uuid'],
@@ -272,13 +310,17 @@ def dispatch(cfg, queue):
                 # Keep the reservation target and retry idempotently next time.
                 job['connection_error'] = str(exc)
             queue.put(job)
+            # GPU reservations are shared across projects. Discard other cached
+            # inventories so the next project cannot reuse a stale free slot.
+            inventories.clear()
+            inventories[key] = inv
             gpu['idle'] = False
             gpu['accepting_jobs'] = False
-            if host_request(cfg, gpu['host'])['max_jobs_per_gpu'] > 1:
+            if host_request(execution_cfg, gpu['host'])['max_jobs_per_gpu'] > 1:
                 # Refresh server-side counts/budgets after each launch, including
                 # jobs still preparing their image and not yet visible to NVML.
                 try:
-                    data = remote(gpu['host'], dict(host_request(cfg, gpu['host']), action='probe'))
+                    data = remote(gpu['host'], dict(host_request(execution_cfg, gpu['host']), action='probe'))
                     for current in data['gpus']:
                         current.update(host=gpu['host'], priority=priority(cfg, current['name']))
                     inv[gpu['host']] = data
@@ -381,8 +423,9 @@ def show_jobs(jobs, include_cancelled=True):
              'cancelled': 4}
     jobs = sorted((j for j in jobs if include_cancelled or j['status'] != 'cancelled'),
                   key=lambda j: (order.get(j['status'], 2), j['created'], j['id']))
+    project_width = max([16] + [len(j.get('project', '-')) for j in jobs])
     print(f'{"ID":8} {"STATE":12} {"HOST":13} {"GPU":3} {"EXIT":4} '
-          f'{"ELAPSED":10} {"SYNC":9} {"AGENTS":24} NAME / COMMAND')
+          f'{"ELAPSED":10} {"SYNC":9} {"AGENTS":24} {"PROJECT":{project_width}} NAME / COMMAND')
     for j in jobs:
         print(f'{j["id"][:8]} {j["status"]:12} {(j.get("host") or "-"):13} '
               f'{str(j.get("gpu_index", "-")):3} '
@@ -390,6 +433,7 @@ def show_jobs(jobs, include_cancelled=True):
               f'{elapsed(j, now):10} '
               f'{j.get("result_sync", {}).get("status", "-"):9} '
               f'{job_agents(j):24} '
+              f'{j.get("project", "-"):{project_width}} '
               f'{j.get("name") or j["command"]}')
         for key in ('error', 'connection_error', 'cleanup_error', 'template_cleanup_error'):
             if j.get(key):
@@ -399,7 +443,7 @@ def show_jobs(jobs, include_cancelled=True):
 
 
 def new_job(cfg, spec):
-    allowed = {'command', 'name', 'host', 'min_free_gb'}
+    allowed = {'command', 'name', 'host', 'min_free_gb', 'project'}
     if set(spec) - allowed:
         raise ValueError('Unknown job fields: ' + ', '.join(sorted(set(spec) - allowed)))
     command = spec.get('command')
@@ -413,12 +457,23 @@ def new_job(cfg, spec):
     memory = spec.get('min_free_gb', 2)
     if not isinstance(memory, (float, int)) or not math.isfinite(memory) or memory < 0:
         raise ValueError('min_free_gb must be finite and nonnegative')
-    return dict(id=uuid.uuid4().hex, created=time.time(), status='queued',
+    project = spec.get('project')
+    if project is None:
+        project = cfg.get('default_project')
+    execution_cfg = project_configuration(cfg, project)
+    execution = {}
+    for entry in execution_cfg['hosts']:
+        request = host_request(execution_cfg, entry['ssh'])
+        execution[entry['ssh']] = {key: request.get(key) for key in ENVIRONMENT_KEYS}
+    job = dict(id=uuid.uuid4().hex, created=time.time(), status='queued',
                 command=command, name=spec.get('name', ''), requested_host=host,
-                min_free_mib=math.ceil(memory * 1024))
+                min_free_mib=math.ceil(memory * 1024), execution=execution)
+    if project is not None:
+        job['project'] = project
+    return job
 
 
-def batch_jobs(cfg, path):
+def batch_jobs(cfg, path, project=None):
     data = json.loads(path.read_text())
     defaults = data.get('defaults', {}) if isinstance(data, dict) else {}
     specs = data.get('jobs') if isinstance(data, dict) else data
@@ -429,6 +484,8 @@ def batch_jobs(cfg, path):
         if not isinstance(row, dict):
             raise ValueError('Each batch job must be an object')
         spec = dict(defaults, **row)
+        if project is not None:
+            spec['project'] = project
         matrix = spec.pop('matrix', {})
         if not isinstance(matrix, dict) or any(
                 not re.fullmatch(r'[A-Za-z_][A-Za-z0-9_]*', key) or
@@ -538,16 +595,19 @@ def parser():
     p.add_argument('--config', type=Path, default=HERE / 'hosts.json')
     p.add_argument('--state-dir', type=Path, default=HERE / 'state')
     sub = p.add_subparsers(dest='action', required=True)
-    sub.add_parser('gpus', help='Inspect GPUs; makes no job submissions')
+    s = sub.add_parser('gpus', help='Inspect GPUs; makes no job submissions')
+    s.add_argument('--project', help='Project environment to inspect')
     s = sub.add_parser('submit', help='Add one shell command to the local queue')
     s.add_argument('command', help='Quote the entire shell command')
     s.add_argument('--name', default='')
+    s.add_argument('--project', help='Project environment for this job')
     s.add_argument('--host', help='Restrict to one configured SSH host')
     s.add_argument('--min-free-gb', type=float, default=2,
                    help='Minimum free VRAM in GiB (default: 2)')
     s.add_argument('--queue-only', action='store_true', help='Store locally without SSH')
     s = sub.add_parser('submit-batch', help='Submit a JSON job list or parameter matrix')
     s.add_argument('file', type=Path)
+    s.add_argument('--project', help='Override the project for every job in the batch')
     s.add_argument('--queue-only', action='store_true')
     s.add_argument('--dry-run', action='store_true', help='Preview without submitting or SSH')
     s = sub.add_parser('cancel', help='Cancel queued jobs or stop assigned jobs')
@@ -578,14 +638,14 @@ def main():
     queue = Queue(args.state_dir)
     if args.action == 'submit':
         job = new_job(cfg, dict(command=args.command, name=args.name,
-                               host=args.host, min_free_gb=args.min_free_gb))
+                               host=args.host, min_free_gb=args.min_free_gb, project=args.project))
         queue.put(job)
         print(job['id'], flush=True)
         if not args.queue_only:
             dispatch_once(cfg, queue)
             show_jobs([queue.get(job['id'])])
     elif args.action == 'submit-batch':
-        jobs = batch_jobs(cfg, args.file)
+        jobs = batch_jobs(cfg, args.file, args.project)
         print(f'Batch {jobs[0]["batch_id"]}: {len(jobs)} jobs', flush=True)
         if args.dry_run:
             show_jobs(jobs)
@@ -607,7 +667,8 @@ def main():
             refresh_shared(cfg, queue)
         cancel_jobs(cfg, queue, args.ids, args.batch)
     elif args.action == 'gpus':
-        for host, data in inventory(cfg).items():
+        for host, data in inventory(project_configuration(
+                cfg, args.project or cfg.get('default_project'))).items():
             print(host)
             if 'error' in data:
                 print('  UNAVAILABLE: ' + data['error'])
