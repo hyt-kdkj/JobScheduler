@@ -102,7 +102,10 @@ python3 prepare_gpu_environment.py --install-driver-version 580.173.02
 | 1件のログを保存（終了後も可） | `python3 scheduler.py logs JOB_ID --lines 1000` |
 | 1件をキャンセル | `python3 scheduler.py cancel JOB_ID` |
 | バッチ全体をキャンセル | `python3 scheduler.py cancel --batch BATCH_ID` |
+| 全プロジェクトの未完了ジョブを一括キャンセル | `python3 scheduler.py cancel --all` |
 | GPU の使用状況を確認 | `python3 scheduler.py gpus` |
+
+`cancel --all` は共有キューの最新情報を取得し、全プロジェクト・全バッチの待機中ジョブをキャンセルして、実行中ジョブには停止を要求します。完了済みの履歴は変更しません。ジョブ ID や `--batch` とは併用できません。停止の完了は `status` で確認できます。
 
 `status` は **正常終了 → 実行中 → 待機中** の順に表示します。同じグループ内は登録順で、失敗・キャンセル済みは通常非表示です。`--all`を付けると失敗ジョブは正常終了の次、キャンセル済みは末尾に表示します。履歴は保持されます。`ELAPSED` は待機時間を含まない実行時間です。
 

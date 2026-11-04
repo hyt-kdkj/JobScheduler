@@ -512,11 +512,18 @@ def batch_jobs(cfg, path, project=None):
     return jobs
 
 
-def cancel_jobs(cfg, queue, prefixes, batch=None):
+def cancel_jobs(cfg, queue, prefixes, batch=None, all_jobs=False):
+    if all_jobs and (prefixes or batch):
+        raise ValueError('--all cannot be combined with job IDs or --batch')
     # Share the dispatch lock so a locally queued job cannot launch during cancel.
     with (queue.directory / 'dispatch.lock').open('a') as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
+        if all_jobs:
+            # Include jobs submitted from another PC before selecting the set.
+            refresh_shared(cfg, queue)
         selected = {queue.get(prefix)['id'] for prefix in prefixes}
+        if all_jobs:
+            selected.update(j['id'] for j in queue.all() if j['status'] not in TERMINAL)
         if batch:
             matches = {j['batch_id'] for j in queue.all()
                        if j.get('batch_id', '').startswith(batch)}
@@ -524,7 +531,10 @@ def cancel_jobs(cfg, queue, prefixes, batch=None):
                 raise ValueError('Batch ID must match exactly one batch')
             selected.update(j['id'] for j in queue.all() if j.get('batch_id') in matches)
         if not selected:
-            raise ValueError('Specify job IDs or --batch BATCH_ID')
+            if all_jobs:
+                print('No jobs to cancel.')
+                return
+            raise ValueError('Specify job IDs, --batch BATCH_ID, or --all')
         for job_id in selected:
             job = queue.get(job_id)
             if job.get('published') and cfg.get('shared_queue'):
@@ -613,6 +623,8 @@ def parser():
     s = sub.add_parser('cancel', help='Cancel queued jobs or stop assigned jobs')
     s.add_argument('ids', nargs='*')
     s.add_argument('--batch', help='Cancel all jobs in this batch')
+    s.add_argument('--all', action='store_true',
+                   help='Cancel all unfinished jobs, including the shared queue')
     sub.add_parser('dispatch', help='Try queued jobs once, then disconnect')
     s = sub.add_parser('status', help='Show completion state and exit codes')
     s.add_argument('--local', action='store_true', help='Show cached state without SSH')
@@ -658,14 +670,15 @@ def main():
             ids = {j['id'] for j in jobs}
             show_jobs([j for j in queue.all() if j['id'] in ids])
     elif args.action == 'cancel':
-        try:
-            for prefix in args.ids:
-                queue.get(prefix)
-            if args.batch and not any(j.get('batch_id', '').startswith(args.batch) for j in queue.all()):
-                raise ValueError('Unknown batch')
-        except ValueError:
-            refresh_shared(cfg, queue)
-        cancel_jobs(cfg, queue, args.ids, args.batch)
+        if not args.all:
+            try:
+                for prefix in args.ids:
+                    queue.get(prefix)
+                if args.batch and not any(j.get('batch_id', '').startswith(args.batch) for j in queue.all()):
+                    raise ValueError('Unknown batch')
+            except ValueError:
+                refresh_shared(cfg, queue)
+        cancel_jobs(cfg, queue, args.ids, args.batch, all_jobs=args.all)
     elif args.action == 'gpus':
         for host, data in inventory(project_configuration(
                 cfg, args.project or cfg.get('default_project'))).items():

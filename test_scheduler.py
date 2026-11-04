@@ -446,6 +446,48 @@ class SchedulingTest(unittest.TestCase):
         self.assertEqual(connect.call_args.args[1]['action'], 'cancel')
         self.assertEqual(self.q.get(job['id'])['status'], 'cancelled')
 
+    def test_cancel_all_cancels_every_unfinished_state_and_preserves_history(self):
+        active = []
+        for state in ('queued', 'dispatching', 'reserved', 'running', 'cancelling', 'unknown'):
+            job = self.job()
+            job.update(status=state, batch_id=uuid.uuid4().hex)
+            if state != 'queued':
+                job['host'] = 'xylophone0'
+            self.q.put(job)
+            active.append(job)
+        terminal = []
+        for state in sorted(s.TERMINAL):
+            job = self.job()
+            job.update(status=state, finished=123)
+            self.q.put(job)
+            terminal.append(job)
+        with patch.object(s, 'remote', return_value={'status': 'cancelled'}) as connect, \
+             contextlib.redirect_stdout(io.StringIO()):
+            s.cancel_jobs(self.cfg, self.q, [], all_jobs=True)
+        self.assertTrue(all(self.q.get(j['id'])['status'] == 'cancelled' for j in active))
+        self.assertEqual(connect.call_count, 5)
+        self.assertTrue(all(call.args[1]['action'] == 'cancel' for call in connect.call_args_list))
+        for job in terminal:
+            self.assertEqual(self.q.get(job['id']), job)
+
+    def test_cancel_all_cli_with_no_pending_jobs_is_successful(self):
+        with patch.object(sys, 'argv', ['scheduler.py', '--state-dir', self.temp.name,
+                                      'cancel', '--all']), \
+             patch.object(s, 'configuration', return_value=self.cfg), \
+             patch.object(s, 'remote') as connect, contextlib.redirect_stdout(io.StringIO()) as output:
+            self.assertEqual(s.main(), 0)
+        connect.assert_not_called()
+        self.assertIn('No jobs to cancel.', output.getvalue())
+
+    def test_cancel_all_rejects_other_selectors_before_connecting(self):
+        for selectors in (['missing-job'], ['--batch', 'missing-batch']):
+            with patch.object(sys, 'argv', ['scheduler.py', '--state-dir', self.temp.name,
+                                          'cancel', '--all'] + selectors), \
+                 patch.object(s, 'remote') as connect:
+                with self.assertRaisesRegex(ValueError, '--all cannot be combined'):
+                    s.main()
+            connect.assert_not_called()
+
     def test_elapsed_uses_finished_time_and_does_not_count_queue_wait(self):
         self.assertEqual(s.elapsed(dict(created=0), now=1000), '-')
         self.assertEqual(s.elapsed(dict(started=100), now=3761), '01:01:01')
@@ -917,6 +959,23 @@ class DetachedLifecycleTest(unittest.TestCase):
             s.refresh_shared(cfg, a)
         self.assertEqual(a.get(job['id'])['status'], 'cancelled')
         self.assertEqual(b.get(job['id'])['status'], 'cancelled')
+
+    def test_cancel_all_imports_shared_jobs_and_also_cancels_unpublished_local_jobs(self):
+        cfg = s.configuration(s.HERE / 'hosts.json')
+        a = s.Queue(self.root / 'pc-a')
+        b = s.Queue(self.root / 'pc-b')
+        shared = s.new_job(cfg, dict(command='echo shared'))
+        local = s.new_job(cfg, dict(command='echo local', project='V2VSimulator-division'))
+        a.put(shared)
+        b.put(local)
+        with patch.object(s, 'remote', side_effect=lambda host, req: self.ns['main'](req)), \
+             contextlib.redirect_stdout(io.StringIO()):
+            s.refresh_shared(cfg, a, publish=True)
+            s.cancel_jobs(cfg, b, [], all_jobs=True)
+            s.refresh_shared(cfg, a)
+        self.assertEqual(a.get(shared['id'])['status'], 'cancelled')
+        self.assertEqual(b.get(shared['id'])['status'], 'cancelled')
+        self.assertEqual(b.get(local['id'])['status'], 'cancelled')
 
     def test_container_cleanup_refuses_a_different_job_label(self):
         req = dict(self.req, job_container='job-scheduler-' + self.req['id'])
