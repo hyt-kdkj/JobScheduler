@@ -64,6 +64,9 @@ python3 scheduler.py status
 python3 stop_containers.py --container v2vsimulator-revision-v2v-dev-1
 ```
 
+Propose の時間 Encoder はコマンドの `--encoder no|LSTM|Transformer` で指定します。既定は `Transformer` です。`jobs/V2VSimulator-revision/*propose*.json` の `matrix.encoder` も既定は `["Transformer"]` とし、比較するときは `["no", "LSTM", "Transformer"]` に変更できます。ジョブ名にも Encoder を含めて区別します。
+
+
 各 SSH 先に `~/workspace/V2VSimulator-revision` とその `docker-shell.sh` を用意してください。ソースコードの自動転送は行いません。テンプレートは `v2vsimulator-revision-v2v-dev-1` で、なければそのプロジェクトの起動スクリプトで作成します。コンテナ内の作業先は、両プロジェクトとも `/workspace/V2VSimulator/Simulator` ですが、マウントするホスト側のソースはそれぞれ異なります。
 
 プロジェクトごとのコンテナ名・作業先・起動スクリプトは `hosts.json` の `projects` に定義しています。新規ジョブは投入時の環境設定を保存し、共有キュー経由の別 PC や定期実行でも同じ環境で起動します。GPU の予約枠と VRAM はプロジェクト間で共通管理します。`status` の `PROJECT` 列で対象を確認できます。対応前に登録したジョブの列は `-` と表示され、従来の実行設定を使います。
