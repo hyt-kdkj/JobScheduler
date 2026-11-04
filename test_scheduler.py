@@ -221,6 +221,22 @@ class SchedulingTest(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, 'Cannot create template container'):
                 r.ensure_template(dict(container='test', template_start_script=str(script)))
 
+    def test_stopped_template_regenerates_device_mappings_with_configured_script(self):
+        import remote as r
+        script = Path(self.temp.name) / 'setup.sh'
+        script.touch()
+        with patch.object(r, 'template_running', side_effect=[False, True]), \
+             patch.object(r, 'run', return_value=subprocess.CompletedProcess([], 0, '', '')) as run:
+            self.assertFalse(r.ensure_template(dict(container='test', template_start_script=str(script))))
+        self.assertEqual(run.call_args.args[0], ['bash', str(script), 'start'])
+
+    def test_open_kernel_module_version_selects_matching_driver_directory(self):
+        import remote as r
+        with patch.object(r.Path, 'exists', return_value=True), \
+             patch.object(r.Path, 'read_text', return_value=(
+                 'NVRM version: NVIDIA UNIX Open Kernel Module for x86_64  615.71.10  Release Build')):
+            self.assertIn('nvidia-driver-615.71.10/lib', r.driver_env())
+
     def test_local_status_and_queue_only_never_connect(self):
         for argv in (['status', '--local'], ['submit', '--queue-only', 'echo safe']):
             with patch.object(sys, 'argv', ['scheduler.py', '--state-dir',
@@ -845,14 +861,15 @@ class DetachedLifecycleTest(unittest.TestCase):
         script.write_text('set -eu\n'
                           'test "$1" = start\n'
                           'printf started >> "$JOB_SCHEDULER_TEST_DOCKER_STATE/template-starts"\n'
-                          'touch "$JOB_SCHEDULER_TEST_DOCKER_STATE/template-created"\n')
+                          'touch "$JOB_SCHEDULER_TEST_DOCKER_STATE/template-created"\n'
+                          'rm -f "$JOB_SCHEDULER_TEST_DOCKER_STATE/template-stopped"\n')
         self.req['template_start_script'] = str(script)
         self.assertEqual(self.ns['main'](self.req)['status'], 'reserved')
         self.assertEqual(self.wait_result()['status'], 'succeeded')
         self.req = dict(self.req, id=uuid.uuid4().hex)
         self.assertEqual(self.ns['main'](self.req)['status'], 'reserved')
         self.assertEqual(self.wait_result()['status'], 'succeeded')
-        self.assertEqual((state / 'template-starts').read_text(), 'started')
+        self.assertEqual((state / 'template-starts').read_text(), 'startedstarted')
 
     def test_template_stop_failure_preserves_job_exit_result(self):
         directory = self.root / 'finish-test'

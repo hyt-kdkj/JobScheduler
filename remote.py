@@ -160,7 +160,7 @@ def driver_env():
     """Only select isolated libraries matching the currently loaded module."""
     version_file = Path('/proc/driver/nvidia/version')
     text = version_file.read_text() if version_file.exists() else ''
-    match = re.search(r'Kernel Module\s+(\d+\.\d+\.\d+)', text)
+    match = re.search(r'Kernel Module(?: for x86_64)?\s+(\d+\.\d+\.\d+)', text)
     directory = f'/opt/nvidia-driver-{match[1]}/lib' if match else ''
     return (f'if [ -d {shlex.quote(directory)} ]; then '
             f'export LD_LIBRARY_PATH={shlex.quote(directory)}'
@@ -231,7 +231,9 @@ def template_running(req):
 def ensure_template(req):
     """Called with template_lock held; return whether it was already running."""
     was_running = template_running(req)
-    if was_running is None:
+    # Re-run the configured script for stopped templates too: docker start
+    # retains stale device mappings and library mounts after host changes.
+    if was_running is None or (not was_running and req.get('template_start_script')):
         script = Path(req.get('template_start_script',
                               '~/workspace/V2VSimulator/docker-shell.sh')).expanduser()
         if not script.is_file():

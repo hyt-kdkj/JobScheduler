@@ -73,6 +73,22 @@ Propose の時間 Encoder はコマンドの `--encoder no|LSTM|Transformer` で
 
 バッチ JSON の `defaults` または各ジョブにも `"project": "V2VSimulator-revision"` を指定できます。優先順位は、コマンドの `--project` → 各ジョブの `project` → `defaults.project` → `hosts.json` の `default_project` です。
 
+### ホストのドライバを変更せず GPU 環境を修復する
+
+`prepare_gpu_environment.py` を計算ホストで実行すると、指定した `docker-shell.sh` をバックアップし、GPU の生成設定をホスト別の `~/.cache/job-scheduler/<hostname>/` に保存するよう変更します。共有 HOME 上で別ホストのデバイス設定が混ざることを防ぎます。
+
+```bash
+# 計算ホストで実行（スクリプトは事前に転送）
+python3 prepare_gpu_environment.py ~/workspace/V2VSimulator-revision/docker-shell.sh
+
+# カーネルドライバが 580.173.02、システムのライブラリが別版の場合
+python3 prepare_gpu_environment.py --install-driver-version 580.173.02
+```
+
+互換ライブラリは NVIDIA 公式パッケージの SHA-256 を検証してから `~/workspace/.job-scheduler/nvidia-driver-580.173.02/lib/` に展開します。ホストのパッケージやドライバは変更しません。修正済みの起動スクリプトは、稼働中のカーネルドライバと一致するこのディレクトリがあれば、読み取り専用でコンテナにマウントします。対応する配布パッケージを確認済みのバージョンだけを指定できます。
+
+次の `gpus --project V2VSimulator-revision` は停止中のテンプレートにも起動スクリプトを実行し、現在のデバイスとマウント設定を反映します。コンテナが再作成された場合、次のジョブで実行用イメージの初回作成が発生することがあります。
+
 ### 状態・ログ・キャンセル
 
 `JOB_ID` は `status` の左端の ID、`BATCH_ID` は投入時の `Batch ...` の値に置き換えます。どちらも一意な先頭部分で指定できます。
