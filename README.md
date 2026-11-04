@@ -50,11 +50,11 @@ python3 scheduler.py gpus --project V2VSimulator-revision
 
 # 1件を投入
 python3 scheduler.py submit --project V2VSimulator-revision --name revision_train \
-  'python3 train_transformer.py --scenario highway --method 4 --step 30'
+  'python3 train_propose.py --scenario highway --step 30'
 
 # 既存のバッチ定義を V2VSimulator-revision で実行する場合
-python3 scheduler.py submit-batch jobs/V2VSimulator-revision/train_transformer.json --dry-run
-python3 scheduler.py submit-batch jobs/V2VSimulator-revision/train_transformer.json
+python3 scheduler.py submit-batch jobs/V2VSimulator-revision/train_propose.json --dry-run
+python3 scheduler.py submit-batch jobs/V2VSimulator-revision/train_propose.json
 
 # 両プロジェクトの待機ジョブを処理・一覧表示
 python3 scheduler.py dispatch

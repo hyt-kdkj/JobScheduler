@@ -1,0 +1,39 @@
+{
+  "defaults": {
+    "project": "V2VSimulator-revision"
+  },
+  "jobs": [
+    {
+      "name": "eval_propose_highway_{step}_{num_vehicles}_analysis",
+      "command": "python3 evaluate_methods.py --agents Propose --scenario highway --step {step} --num-vehicles {num_vehicles} --analysis-only",
+      "matrix": {
+        "step": [
+          10,
+          20,
+          30,
+          40
+        ],
+        "num_vehicles": [
+          120,
+          360
+        ]
+      }
+    },
+    {
+      "name": "eval_propose_urban_{step}_{num_vehicles}_analysis",
+      "command": "python3 evaluate_methods.py --agents Propose --scenario urban --step {step} --num-vehicles {num_vehicles} --analysis-only",
+      "matrix": {
+        "step": [
+          10,
+          20,
+          30,
+          40
+        ],
+        "num_vehicles": [
+          200,
+          500
+        ]
+      }
+    }
+  ]
+}

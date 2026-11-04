@@ -1,12 +1,12 @@
 # Gitで管理するジョブ定義
 
-ジョブ定義は `jobs/V2VSimulator/` と `jobs/V2VSimulator-revision/` に分けています。各フォルダに以下の11ファイルを配置しています。`JobScheduler/` 内で実行します。
+ジョブ定義は `jobs/V2VSimulator/` と `jobs/V2VSimulator-revision/` に分けています。`JobScheduler/` 内で実行します。
 
-各 JSON の `defaults.project` に対象プロジェクトを設定しているため、ファイルを指定するだけで対応する環境に投入できます。revision 側は既存のジョブ定義を複製したものです。コマンドやパラメータは各フォルダで個別に変更できます。
+各 JSON の `defaults.project` に対象プロジェクトを設定しているため、ファイルを指定するだけで対応する環境に投入できます。revision 側は現行のPropose用CLIに合わせた6ファイルで、stepは10・20・30・40です。ファイル一覧・使い方は[revision用README](V2VSimulator-revision/README.md)を参照してください。以下の旧Transformer・LSTMの説明はV2VSimulator向けです。
 
 ```bash
 python3 scheduler.py submit-batch jobs/V2VSimulator/train_transformer.json --dry-run
-python3 scheduler.py submit-batch jobs/V2VSimulator-revision/train_transformer.json --dry-run
+python3 scheduler.py submit-batch jobs/V2VSimulator-revision/train_propose.json --dry-run
 ```
 
 | ファイル | 内容 | ジョブ数 |

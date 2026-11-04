@@ -1,0 +1,23 @@
+{
+  "defaults": {
+    "project": "V2VSimulator-revision"
+  },
+  "jobs": [
+    {
+      "name": "train_propose_{scenario}_{step}",
+      "command": "python3 train_propose.py --scenario {scenario} --step {step}",
+      "matrix": {
+        "scenario": [
+          "highway",
+          "urban"
+        ],
+        "step": [
+          10,
+          20,
+          30,
+          40
+        ]
+      }
+    }
+  ]
+}

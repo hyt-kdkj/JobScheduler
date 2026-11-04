@@ -1,0 +1,39 @@
+{
+  "defaults": {
+    "project": "V2VSimulator-revision"
+  },
+  "jobs": [
+    {
+      "name": "feature_ablation_propose_highway_{step}_{num_vehicles}",
+      "command": "python3 evaluate_feature_ablation.py --agents Propose --scenario highway --step {step} --num-vehicles {num_vehicles} --model highway:120 --analysis-only",
+      "matrix": {
+        "step": [
+          10,
+          20,
+          30,
+          40
+        ],
+        "num_vehicles": [
+          120,
+          360
+        ]
+      }
+    },
+    {
+      "name": "feature_ablation_propose_urban_{step}_{num_vehicles}",
+      "command": "python3 evaluate_feature_ablation.py --agents Propose --scenario urban --step {step} --num-vehicles {num_vehicles} --model urban:200 --analysis-only",
+      "matrix": {
+        "step": [
+          10,
+          20,
+          30,
+          40
+        ],
+        "num_vehicles": [
+          200,
+          500
+        ]
+      }
+    }
+  ]
+}
