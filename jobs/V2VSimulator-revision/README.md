@@ -5,7 +5,7 @@
 | ディレクトリ | 学習構成 | モデル・結果 |
 |---|---|---|
 | [initial-0.3](initial-0.3/README.md) | 元の150,000 steps、初期ε0.3、元の学習率減衰 | 従来の保存先。既存モデルを利用可能 |
-| [initial-0.5](initial-0.5/README.md) | 追加の170,000 steps、初期ε0.5、最後の20,000 stepsは学習率2e-5 | 別名で保存 |
+| [initial-0.5](initial-0.5/README.md) | 150,000 steps、初期ε0.5、120,000 steps以降は学習率4e-5 | 別名で保存 |
 
 どちらもEncoderは **Transformer・noのみ**、履歴長は **10・20・30のみ** です。各ディレクトリは学習12ジョブ、通常評価24ジョブ、詳細解析24ジョブ、特徴量比較24ジョブ、通常描画8ジョブ、詳細描画8ジョブです。学習・評価・描画のεプロファイルはディレクトリ名に固定します。ジョブ名にもEncoderとεプロファイルを含めます。
 
@@ -34,3 +34,5 @@ python3 scheduler.py submit-batch jobs/V2VSimulator-revision/initial-0.5/train_p
 # 既存の初期ε0.3モデルを評価
 python3 scheduler.py submit-batch jobs/V2VSimulator-revision/initial-0.3/evaluate_propose.json
 ```
+
+評価対象は150,000学習stepsまで（slot上限149999）です。以前の170,000 stepsのモデル・測定結果は評価用の自動選択から除外し、上限を超えるslotの明示指定はエラーになります。

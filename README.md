@@ -101,6 +101,7 @@ python3 prepare_gpu_environment.py --install-driver-version 580.173.02
 | コマンド・実行先・Batch ID の詳細 | `python3 scheduler.py info JOB_ID` |
 | 1件のログを保存（終了後も可） | `python3 scheduler.py logs JOB_ID --lines 1000` |
 | 1件をキャンセル | `python3 scheduler.py cancel JOB_ID` |
+| 消えた監視を稼働中コンテナに付け直す | `python3 scheduler.py recover JOB_ID [JOB_ID ...]` |
 | バッチ全体をキャンセル | `python3 scheduler.py cancel --batch BATCH_ID` |
 | 全プロジェクトの未完了ジョブを一括キャンセル | `python3 scheduler.py cancel --all` |
 | GPU の使用状況を確認 | `python3 scheduler.py gpus` |
@@ -125,6 +126,7 @@ python3 prepare_gpu_environment.py --install-driver-version 580.173.02
 - ログは `logs/current/ジョブ名_ID.log` に保存し、本文はターミナルに表示しません。`--output-dir logs/checkpoint` で保存先を変更できます。同じファイルは取得のたびに上書きし、取得量は各ジョブ末尾256 KiBまでです。
 - キャンセルはそのジョブ専用のコンテナを停止します。停止完了は `status --all` で確認してください。
 - 通信失敗だけではジョブを失敗扱いにしません。`connection_error` が出たら、後で `status` を再実行してください。
+- tmux が消えても、ジョブ専用コンテナの所有ラベルと稼働を確認できれば `running` と表示し、ログは Docker から取得します。`recover JOB_ID` で終了コードの回収とキャンセル処理を含む監視を付け直せます。学習コマンドの再実行やコンテナの再起動は行いません。コンテナも既に消えている場合は終了結果を断定できないため、`unknown` を維持します。`logs --running` は `unknown` のログも保存します。
 
 ## バッチ JSON
 

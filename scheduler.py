@@ -575,7 +575,7 @@ def save_log(job, log, output_dir):
 
 def running_logs(cfg, queue, lines, output_dir=Path('logs/current')):
     selected = [j for j in queue.all() if j.get('host') and
-                j['status'] in ('dispatching', 'reserved', 'running', 'cancelling')]
+                j['status'] in ('dispatching', 'reserved', 'running', 'cancelling', 'unknown')]
     if not selected:
         sync_completed(cfg, queue)
         print('No running jobs.')
@@ -638,6 +638,8 @@ def parser():
     s.add_argument('--lines', type=int, default=80)
     s = sub.add_parser('info', help='Show saved command, session and results without SSH')
     s.add_argument('id')
+    s = sub.add_parser('recover', help='Restore monitoring of an existing job container without restarting it')
+    s.add_argument('ids', nargs='+', help='Job IDs or unique prefixes')
     s = sub.add_parser('export', help='Export job history as a Git-friendly JSON snapshot')
     s.add_argument('--output', type=Path, default=HERE / 'jobs/history.json')
     s.add_argument('--refresh', action='store_true', help='Fetch shared/remote state first')
@@ -728,6 +730,20 @@ def main():
             sync_completed(cfg, queue)
             log = remote(j['host'], {'action': 'logs', 'id': j['id'], 'lines': args.lines})['log']
             save_log(j, log, args.output_dir)
+    elif args.action == 'recover':
+        selected = []
+        for prefix in args.ids:
+            job = queue.get(prefix)
+            if not job.get('host'):
+                raise ValueError('Job has not been assigned to a host yet')
+            before = copy.deepcopy(job)
+            try:
+                apply_result(job, remote(job['host'], dict(action='recover', id=job['id'])))
+            except RuntimeError as exc:
+                job['connection_error'] = str(exc)
+            queue.update_if_unchanged(before, job)
+            selected.append(job)
+        show_jobs(selected)
     elif args.action == 'info':
         j = queue.get(args.id)
         j['elapsed'] = elapsed(j)

@@ -557,6 +557,8 @@ class SchedulingTest(unittest.TestCase):
         for job, host in zip(jobs, ('glockenspiel', 'glockenspiel', 'xylophone0')):
             job.update(status='running', host=host)
             self.q.put(job)
+        jobs[0]['status'] = 'unknown'
+        self.q.put(jobs[0])
         def reply(host, request):
             return {'jobs': [dict(id=key, status='running', log='log-' + key)
                              for key in request['ids']]}
@@ -657,6 +659,104 @@ class SchedulingTest(unittest.TestCase):
             s.dispatch(cfg, self.q)
         self.assertEqual(len(launches), 2)
         self.assertEqual(self.q.get(jobs[-1]['id'])['status'], 'queued')
+
+
+class MonitorRecoveryTest(unittest.TestCase):
+    def setUp(self):
+        import remote as r
+        self.r = r
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        root = patch.object(r, 'root_dir', return_value=Path(self.temp.name))
+        root.start()
+        self.addCleanup(root.stop)
+        self.job_id = uuid.uuid4().hex
+        self.directory = r.job_path(self.job_id)
+        self.directory.mkdir()
+        self.data = dict(id=self.job_id, status='running', session='jobs',
+                         window_id='@4', gpu='GPU-test', started=123,
+                         job_container='job-scheduler-' + self.job_id)
+        r.save(self.directory / 'status.json', self.data)
+        r.save(self.directory / 'request.json', self.data)
+        self.info = dict(State=dict(Running=True), Config=dict(Labels={
+            'job-scheduler.id': self.job_id}))
+
+    def test_missing_tmux_falls_back_to_owned_running_container(self):
+        for state in ('running', 'unknown'):
+            self.r.save(self.directory / 'status.json', dict(self.data, status=state))
+            with patch.object(self.r, 'window_exists', return_value=False), \
+                 patch.object(self.r, 'inspect_job_container', return_value=self.info):
+                result = self.r.read_job(self.job_id)
+            self.assertEqual(result['status'], 'running')
+            self.assertEqual(result['started'], 123)
+
+    def test_missing_container_keeps_reservation_unknown(self):
+        with patch.object(self.r, 'window_exists', return_value=False), \
+             patch.object(self.r, 'inspect_job_container', return_value=None):
+            self.assertEqual(self.r.read_job(self.job_id)['status'], 'unknown')
+            with self.assertRaisesRegex(RuntimeError, 'absent or stopped'):
+                self.r.recover(self.job_id)
+
+    def test_wrong_container_label_is_rejected(self):
+        self.info['Config']['Labels']['job-scheduler.id'] = 'someone-else'
+        response = subprocess.CompletedProcess([], 0, json.dumps([self.info]), '')
+        with patch.object(self.r, 'run', return_value=response):
+            with self.assertRaisesRegex(RuntimeError, 'different job label'):
+                self.r.inspect_job_container(self.data)
+
+    def test_log_read_uses_docker_when_worker_log_is_stale(self):
+        (self.directory / 'output.log').write_text('stale log')
+
+        def docker_logs(args, **kwargs):
+            self.assertEqual(args[:3], ['docker', 'logs', '--tail'])
+            kwargs['stdout'].write(b'current Docker log\n')
+            return subprocess.CompletedProcess(args, 0)
+
+        with patch.object(self.r, 'window_exists', return_value=False), \
+             patch.object(self.r, 'inspect_job_container', return_value=self.info), \
+             patch.object(self.r.subprocess, 'run', side_effect=docker_logs):
+            self.assertEqual(self.r.read_log(self.job_id, 50), 'current Docker log')
+
+    def test_recover_starts_only_monitor_and_is_idempotent(self):
+        response = subprocess.CompletedProcess([], 0, '@12\n', '')
+        with patch.object(self.r, 'window_exists', return_value=False), \
+             patch.object(self.r, 'inspect_job_container', return_value=self.info), \
+             patch.object(self.r, 'SOURCE_CODE', 'monitor source', create=True), \
+             patch.object(self.r, 'tmux', return_value=response) as tmux:
+            result = self.r.recover(self.job_id)
+        self.assertEqual(result['window_id'], '@12')
+        self.assertEqual(result['started'], 123)
+        command = tmux.call_args.args[0][-1]
+        self.assertIn('--monitor', command)
+        self.assertNotIn('--worker', command)
+        with patch.object(self.r, 'window_exists', return_value=True), \
+             patch.object(self.r, 'tmux') as tmux:
+            self.r.recover(self.job_id)
+            tmux.assert_not_called()
+
+    def test_monitor_retains_exit_code_and_replaces_stale_log(self):
+        for code, cancelled, state in ((0, False, 'succeeded'), (7, False, 'failed'),
+                                        (143, True, 'cancelled')):
+            self.r.save(self.directory / 'status.json', self.data)
+            (self.directory / 'output.log').write_text('stale log')
+            if cancelled:
+                (self.directory / 'cancel.request').touch()
+            waiter = unittest.mock.Mock(returncode=0)
+            waiter.communicate.return_value = (str(code) + '\n', '')
+            waiter.poll.return_value = 0
+            logs = unittest.mock.Mock()
+            logs.stdout = io.BytesIO(b'current training log\n')
+            logs.poll.return_value = 0
+            with patch.object(self.r, 'owned_container', return_value=True), \
+                 patch.object(self.r.subprocess, 'Popen', side_effect=[waiter, logs]) as popen, \
+                 patch.object(self.r.threading, 'Thread'), \
+                 patch.object(self.r.os, 'write'), \
+                 patch.object(self.r, 'finish_job') as finish:
+                self.r.monitor(self.job_id)
+            self.assertEqual(finish.call_args.args[1]['status'], state)
+            self.assertEqual(finish.call_args.args[1]['exit_code'], code)
+            self.assertEqual(popen.call_args_list[0].args[0][1], 'wait')
+            self.assertEqual((self.directory / 'output.log').read_text(), 'current training log\n')
 
 
 @unittest.skipUnless(shutil.which('tmux'), 'tmux is required for lifecycle tests')
@@ -763,6 +863,49 @@ class DetachedLifecycleTest(unittest.TestCase):
         data = self.ns['main']({'action': 'status', 'id': self.req['id']})
         self.assertEqual(data['status'], 'unknown')
         self.assertEqual(self.ns['main'](dict(self.req, id=uuid.uuid4().hex))['status'], 'busy')
+
+    def test_recovered_monitor_collects_logs_and_failure_without_relaunch(self):
+        directory = self.ns['job_path'](self.req['id'])
+        directory.mkdir(parents=True)
+        data = dict(id=self.req['id'], status='running', session='jobs', window_id='@999',
+                    gpu='GPU-test', started=123, job_container='job-scheduler-' + self.req['id'])
+        self.ns['save'](directory / 'status.json', data)
+        self.ns['save'](directory / 'request.json', dict(self.req, **{
+            'job_container': data['job_container']}))
+        docker = self.root / 'bin/docker'
+        docker.write_text('#!/usr/bin/python3\n' + '''
+import json, os, sys, time
+with open(os.environ['JOB_SCHEDULER_TEST_DOCKER_LOG'], 'a') as log:
+    log.write(json.dumps(sys.argv[1:]) + '\\n')
+action = sys.argv[1]
+if action == 'inspect':
+    print(json.dumps([dict(State=dict(Running=sys.argv[-1] != 'test'),
+                          Config=dict(Labels={'job-scheduler.id': sys.argv[-1].removeprefix('job-scheduler-')}))]))
+elif action == 'wait':
+    time.sleep(0.8)
+    print(7)
+elif action == 'logs':
+    print('recovered-output', flush=True)
+    time.sleep(0.8)
+else:
+    raise RuntimeError('Unexpected Docker mutation: ' + action)
+''')
+        result = self.ns['main'](dict(action='recover', id=self.req['id']))
+        again = self.ns['main'](dict(action='recover', id=self.req['id']))
+        self.assertEqual(result['window_id'], again['window_id'])
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline:
+            result = self.ns['main'](dict(action='status', id=self.req['id']))
+            if result['status'] in s.TERMINAL:
+                break
+            time.sleep(0.05)
+        self.assertEqual(result['status'], 'failed')
+        self.assertEqual(result['exit_code'], 7)
+        self.assertEqual(result['started'], 123)
+        self.assertIn('recovered-output', (directory / 'output.log').read_text())
+        operations = [json.loads(line)[0] for line in self.docker_log.read_text().splitlines()]
+        self.assertEqual(operations.count('wait'), 1)
+        self.assertFalse(set(operations) & {'run', 'start', 'stop', 'rm'})
 
     def test_cancel_stops_process_group_and_preserves_unrelated_process(self):
         pidfile = self.root / 'child.pid'

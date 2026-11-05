@@ -12,6 +12,7 @@ import signal
 import socket
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 
@@ -188,11 +189,15 @@ def read_job(job_id):
         return {'id': job_id, 'status': 'missing'}
     data = json.loads(path.read_text())
     alive = (window_exists(data['window_id']) if data.get('window_id') else
-             session_exists(data['session'])) if data['status'] in ('reserved', 'running') else True
-    if data['status'] in ('reserved', 'running') and not alive:
+             session_exists(data['session'])) if data['status'] in ('reserved', 'running', 'unknown') else True
+    if data['status'] in ('reserved', 'running', 'unknown') and not alive:
         # Do not release a GPU or retry an uncertain command automatically.
         data['status'] = 'unknown'
         data['error'] = 'tmux session is absent; check the container before retrying'
+        if data.get('job_container'):
+            info = inspect_job_container(data)
+            if info and info['State'].get('Running'):
+                data.update(status='running', error='Monitor is absent; container is running. Use recover to restore monitoring.')
     elif data['status'] in ('reserved', 'running') and (path.parent / 'cancel.request').exists():
         data['status'] = 'cancelling'
     return data
@@ -405,16 +410,99 @@ def job_command_locked(req):
     return args + [image, '-o', 'pipefail', '-c', driver_env() + req['command']]
 
 
-def owned_container(req):
+def inspect_job_container(req):
     result = run(['docker', 'inspect', req['job_container']])
     if result.returncode:
         if 'no such' in result.stderr.lower():
-            return False
+            return None
         raise RuntimeError('Cannot inspect job container: ' + result.stderr.strip())
     info = json.loads(result.stdout)[0]
     if (info['Config'].get('Labels') or {}).get('job-scheduler.id') != req['id']:
         raise RuntimeError('Refusing to touch a container with a different job label')
-    return True
+    return info
+
+
+def owned_container(req):
+    return inspect_job_container(req) is not None
+
+
+def recover(job_id):
+    """Attach a new observer to an existing container without executing its command."""
+    directory = job_path(job_id)
+    data = json.loads((directory / 'status.json').read_text())
+    if data['status'] in ('succeeded', 'failed', 'cancelled'):
+        return data
+    if data.get('window_id') and window_exists(data['window_id']):
+        return read_job(job_id)
+    if not data.get('job_container'):
+        raise RuntimeError('This job has no dedicated container to monitor')
+    info = inspect_job_container(data)
+    if not info or not info['State'].get('Running'):
+        raise RuntimeError('Job container is absent or stopped; cannot recover a running monitor')
+    # Never start a container or re-run a training command during recovery.
+    (directory / 'monitor.py').write_text(SOURCE_CODE)
+    command = shlex.join(['python3', str(directory / 'monitor.py'), '--monitor', job_id])
+    if tmux(['has-session', '-t', '=jobs']).returncode:
+        result = tmux(['new-session', '-d', '-s', 'jobs', '-n', 'overview', 'sleep infinity'])
+        if result.returncode:
+            raise RuntimeError(result.stderr.strip())
+    result = tmux(['new-window', '-d', '-P', '-F', '#{window_id}', '-t', '=jobs:',
+                   '-n', 'job-' + job_id[:8], 'sleep infinity'])
+    if result.returncode:
+        raise RuntimeError(result.stderr.strip())
+    data.update(window_id=result.stdout.strip(), status='running', recovered=time.time())
+    data.pop('error', None)
+    save(directory / 'status.json', data)
+    result = tmux(['respawn-pane', '-k', '-t', data['window_id'], command])
+    if result.returncode:
+        raise RuntimeError(result.stderr.strip())
+    return data
+
+
+def monitor(job_id):
+    signal.signal(signal.SIGHUP, signal.SIG_IGN)
+    directory = job_path(job_id)
+    req = json.loads((directory / 'request.json').read_text())
+    data = json.loads((directory / 'status.json').read_text())
+    if not owned_container(req):
+        return  # Completion raced with recovery; keep the reservation uncertain.
+    stopped = threading.Event()
+    # Register Docker's waiter before following logs: --rm containers disappear
+    # immediately after exit, but an already registered waiter retains the code.
+    waiter = subprocess.Popen(['docker', 'wait', req['job_container']],
+                              stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    logs = None
+    try:
+        logs = subprocess.Popen(['docker', 'logs', '--follow', req['job_container']],
+                                stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        threading.Thread(target=watch_cancel, args=(req, directory, stopped), daemon=True).start()
+        # Docker holds the complete training log; replace the stale worker copy.
+        with (directory / 'output.log').open('wb', buffering=0) as log:
+            while True:
+                chunk = logs.stdout.read1(65536)
+                if not chunk:
+                    break
+                log.write(chunk)
+                with contextlib.suppress(OSError):
+                    os.write(sys.stdout.fileno(), chunk)
+        logs.wait()
+        output, error = waiter.communicate()
+        if waiter.returncode or not output.strip().isdigit():
+            raise RuntimeError('Cannot determine container exit code: ' + error.strip())
+        code = int(output.strip())
+        state = 'succeeded' if code == 0 else 'failed'
+        if code != 0 and (directory / 'cancel.request').exists():
+            state = 'cancelled'
+        data.update(status=state, exit_code=code, finished=time.time())
+    except Exception as exc:
+        data.update(status='unknown', error=str(exc))
+    finally:
+        stopped.set()
+        for process in (logs, waiter):
+            if process is not None and process.poll() is None:
+                process.terminate()
+                process.wait()
+    finish_job(directory, data)
 
 
 def remove_container(req):
@@ -637,6 +725,8 @@ def main(req):
             return launch(req)
         if action == 'status':
             return read_job(req['id'])
+        if action == 'recover':
+            return recover(req['id'])
         if action == 'status_batch':
             results = []
             for request in req['requests']:
@@ -662,6 +752,17 @@ def main(req):
 
 
 def read_log(job_id, lines):
+    data = read_job(job_id)
+    alive = data.get('window_id') and window_exists(data['window_id'])
+    if not alive and data.get('job_container') and inspect_job_container(data):
+        # Bound memory even when an individual Docker log line is very large.
+        with tempfile.TemporaryFile() as output:
+            result = subprocess.run(['docker', 'logs', '--tail', str(lines), data['job_container']],
+                                    stdout=output, stderr=output, timeout=25)
+            if result.returncode == 0:
+                output.seek(0, os.SEEK_END)
+                output.seek(max(0, output.tell() - 256 * 1024))
+                return output.read().decode('utf-8', errors='replace').rstrip('\n')
     path = job_path(job_id) / 'output.log'
     if not path.exists():
         return ''
@@ -674,6 +775,8 @@ def read_log(job_id, lines):
 if __name__ == '__main__':
     if len(sys.argv) > 1 and sys.argv[1] == '--worker':
         worker(sys.argv[2])
+    elif len(sys.argv) > 1 and sys.argv[1] == '--monitor':
+        monitor(sys.argv[2])
     else:
         try:
             print(json.dumps(main(json.load(sys.stdin)), ensure_ascii=False))
