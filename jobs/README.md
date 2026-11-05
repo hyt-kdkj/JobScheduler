@@ -6,7 +6,7 @@
 
 ```bash
 python3 scheduler.py submit-batch jobs/V2VSimulator/train_transformer.json --dry-run
-python3 scheduler.py submit-batch jobs/V2VSimulator-revision/train_propose.json --dry-run
+python3 scheduler.py submit-batch jobs/V2VSimulator-revision/initial-0.5/train_propose.json --dry-run
 ```
 
 | ファイル | 内容 | ジョブ数 |

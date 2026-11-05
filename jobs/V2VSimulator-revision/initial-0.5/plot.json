@@ -1,0 +1,41 @@
+{
+  "defaults": {
+    "project": "V2VSimulator-revision"
+  },
+  "jobs": [
+    {
+      "name": "plot_propose_highway_steps10to30_{num_vehicles}_{encoder}_{epsilon_profile}",
+      "command": "python3 plot_evaluation.py --agents SPS IPMI Propose --scenario highway --step 10 20 30 --num-vehicles {num_vehicles} --encoder {encoder} --epsilon-profile {epsilon_profile}",
+      "matrix": {
+        "num_vehicles": [
+          120,
+          360
+        ],
+        "encoder": [
+          "Transformer",
+          "no"
+        ],
+        "epsilon_profile": [
+          "initial-0.5"
+        ]
+      }
+    },
+    {
+      "name": "plot_propose_urban_steps10to30_{num_vehicles}_{encoder}_{epsilon_profile}",
+      "command": "python3 plot_evaluation.py --agents SPS IPMI Propose --scenario urban --step 10 20 30 --num-vehicles {num_vehicles} --encoder {encoder} --epsilon-profile {epsilon_profile}",
+      "matrix": {
+        "num_vehicles": [
+          200,
+          500
+        ],
+        "encoder": [
+          "Transformer",
+          "no"
+        ],
+        "epsilon_profile": [
+          "initial-0.5"
+        ]
+      }
+    }
+  ]
+}

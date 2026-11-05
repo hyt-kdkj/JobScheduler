@@ -1,0 +1,29 @@
+{
+  "defaults": {
+    "project": "V2VSimulator-revision"
+  },
+  "jobs": [
+    {
+      "name": "train_propose_{scenario}_{step}_{encoder}_{epsilon_profile}",
+      "command": "python3 train_propose.py --scenario {scenario} --step {step} --encoder {encoder} --epsilon-profile {epsilon_profile}",
+      "matrix": {
+        "scenario": [
+          "highway",
+          "urban"
+        ],
+        "step": [
+          10,
+          20,
+          30
+        ],
+        "encoder": [
+          "Transformer",
+          "no"
+        ],
+        "epsilon_profile": [
+          "initial-0.3"
+        ]
+      }
+    }
+  ]
+}
