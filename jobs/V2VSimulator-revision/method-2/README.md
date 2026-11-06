@@ -1,13 +1,13 @@
 # Propose method 2 の学習・測定
 
 案B：現在資源を譲る損失の共有。全コマンドで`--method 2 --epsilon-profile initial-0.5`を指定する。
-実行先は **glockenspiel**、プロジェクトは`V2VSimulator-revision`。
+実行先は **利用可能な全サーバーから自動選択**、プロジェクトは`V2VSimulator-revision`。
 Encoderは **Transformerのみ**、履歴長は10・20・30、学習期間は150,000 steps。
 mode=safe、option=A、XLA=offを固定する。
 
 既存method 0のinitial-0.5モデルを読み込み、協調枝を学習する。
 method 0の再学習は行わない。同じシナリオ・履歴長・Encoder・εプロファイルのモデルを、
-glockenspielから見えるプロジェクトの`Simulator/save_model/`に用意する。
+各サーバーから見える共有プロジェクトの`Simulator/save_model/`に用意する。
 method 2のモデル・結果はmethod 0とは別名で、保存名には
 `_epsilon_high_exploration`が付く。
 
@@ -48,7 +48,7 @@ Schedulerにはバッチ間の依存関係機能がないため、学習と測�
 ## 描画
 
 SPS・IPMI・Propose method 2を比較する。初期ε0.5・Transformerのみで、
-highway 120・360台／urban 200・500台をglockenspielで描画する。
+highway 120・360台／urban 200・500台を利用可能なサーバーで描画する。
 各ジョブは`--step 10 20 30`をまとめて指定し、履歴長ごとには分割しない。
 通常描画は15 seedの測定、詳細描画はanalysis seed 100を使用する。
 全履歴長のmethod 2のslot 149999が揃っていることを、評価バッチと同じ確認処理で検証する。

@@ -1,7 +1,6 @@
 {
   "defaults": {
-    "project": "V2VSimulator-revision",
-    "host": "glockenspiel"
+    "project": "V2VSimulator-revision"
   },
   "jobs": [
     {
