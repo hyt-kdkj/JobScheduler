@@ -17,6 +17,8 @@
   "idle_max_used_mib": 512,
   "idle_max_utilization": 10,
   "max_jobs_per_gpu": 2,
+  "max_jobs_per_host": 2,
+  "max_ssh_connections": 1,
   "gpu_memory_headroom_mib": 1024,
   "shared_queue": {
     "host": "glockenspiel"

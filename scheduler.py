@@ -3,8 +3,10 @@
 import argparse
 import base64
 import copy
+from contextlib import contextmanager, ExitStack
 from concurrent.futures import ThreadPoolExecutor
 import fcntl
+import hashlib
 import json
 import itertools
 import math
@@ -20,6 +22,39 @@ import uuid
 HERE = Path(__file__).resolve().parent
 TERMINAL = {'succeeded', 'failed', 'cancelled'}
 ENVIRONMENT_KEYS = ('container', 'workdir', 'template_start_script', 'runtime_image')
+SSH_LOCK_DIRECTORY = HERE / 'state' / 'ssh-connections'
+SSH_CONNECTION_LIMITS = {}
+
+
+def configure_ssh(cfg, state_dir):
+    global SSH_LOCK_DIRECTORY
+    SSH_LOCK_DIRECTORY = state_dir / 'ssh-connections'
+    SSH_CONNECTION_LIMITS.clear()
+    SSH_CONNECTION_LIMITS.update({
+        host['ssh']: host.get('max_ssh_connections', cfg.get('max_ssh_connections', 1))
+        for host in cfg['hosts']})
+
+
+@contextmanager
+def ssh_connection_slot(host):
+    """Bound SSH connections across threads and commands sharing a state dir."""
+    SSH_LOCK_DIRECTORY.mkdir(parents=True, exist_ok=True, mode=0o700)
+    name = hashlib.sha256(host.encode()).hexdigest()
+    with ExitStack() as stack:
+        slots = [stack.enter_context((SSH_LOCK_DIRECTORY / f'{name}.{i}.lock').open('a'))
+                 for i in range(SSH_CONNECTION_LIMITS.get(host, 1))]
+        while True:
+            for slot in slots:
+                try:
+                    fcntl.flock(slot, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                except BlockingIOError:
+                    continue
+                try:
+                    yield
+                finally:
+                    fcntl.flock(slot, fcntl.LOCK_UN)
+                return
+            time.sleep(0.05)
 
 
 def remote(host, request):
@@ -32,9 +67,10 @@ def remote(host, request):
            '-o', 'ServerAliveInterval=10', '-o', 'ServerAliveCountMax=2', host,
            shlex.join(['python3', '-c', loader])]
     try:
-        result = subprocess.run(cmd, input=json.dumps(request), text=True,
-                                stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                                timeout=1900 if request.get('action') in ('probe', 'launch') else 100)
+        with ssh_connection_slot(host):
+            result = subprocess.run(cmd, input=json.dumps(request), text=True,
+                                    stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                    timeout=1900 if request.get('action') in ('probe', 'launch') else 100)
     except (OSError, subprocess.TimeoutExpired) as exc:
         raise RuntimeError(str(exc)) from exc
     if result.returncode:
@@ -62,6 +98,13 @@ def configuration(path):
     if shared and (not isinstance(shared, dict) or shared.get('host') not in names):
         raise ValueError('shared_queue.host must name a configured SSH host')
     for entry in [cfg] + cfg['hosts']:
+        connections = entry.get('max_ssh_connections', cfg.get('max_ssh_connections', 1))
+        if not isinstance(connections, int) or isinstance(connections, bool) or connections < 1:
+            raise ValueError('max_ssh_connections must be a positive integer')
+        host_limit = entry.get('max_jobs_per_host', cfg.get('max_jobs_per_host'))
+        if host_limit is not None and (
+                not isinstance(host_limit, int) or isinstance(host_limit, bool) or host_limit < 1):
+            raise ValueError('max_jobs_per_host must be a positive integer')
         excluded = entry.get('excluded_gpu_uuids', [])
         if not isinstance(excluded, list) or any(
                 not isinstance(value, str) or not value.startswith('GPU-') or len(value) <= 4
@@ -114,6 +157,8 @@ def host_request(cfg, host):
         result['template_start_script'] = entry.get('template_start_script', cfg.get('template_start_script'))
     for key, default in (('max_jobs_per_gpu', 1), ('gpu_memory_headroom_mib', 0)):
         result[key] = entry.get(key, cfg.get(key, default))
+    if entry.get('max_jobs_per_host', cfg.get('max_jobs_per_host')) is not None:
+        result['max_jobs_per_host'] = entry.get('max_jobs_per_host', cfg.get('max_jobs_per_host'))
     result['excluded_gpu_uuids'] = list(entry.get('excluded_gpu_uuids', cfg.get('excluded_gpu_uuids', [])))
     return result
 
@@ -137,11 +182,16 @@ def inventory(cfg):
         return dict(pool.map(check, cfg['hosts']))
 
 
-def candidates(cfg, inv, job):
+def candidates(cfg, inv, job, host_counts=None):
+    host_counts = host_counts or {}
+    limits = {entry['ssh']: entry.get('max_jobs_per_host', cfg.get('max_jobs_per_host'))
+              for entry in cfg['hosts']}
     excluded = {entry['ssh']: set(entry.get('excluded_gpu_uuids', cfg.get('excluded_gpu_uuids', [])))
                 for entry in cfg['hosts']}
     options = [gpu for host, data in inv.items() for gpu in data.get('gpus', [])
                if (not job.get('requested_host') or job['requested_host'] == host)
+               and (limits.get(host) is None or
+                    max(host_counts.get(host, 0), data.get('host_occupied_jobs', 0)) < limits[host])
                and gpu['uuid'] not in excluded.get(host, set())
                and gpu.get('accepting_jobs', gpu['idle'])
                and gpu.get('available_mib', gpu['total_mib'] - gpu['used_mib']) >= job['min_free_mib']]
@@ -301,7 +351,11 @@ def dispatch(cfg, queue):
                 if 'error' in data:
                     print(f'[{host}] unavailable: {data["error"]}', file=sys.stderr, flush=True)
         inv = inventories[key]
-        for gpu in candidates(cfg, inv, job):
+        host_counts = {}
+        for assigned in queue.all():
+            if assigned.get('host') and assigned['status'] not in TERMINAL | {'queued'}:
+                host_counts[assigned['host']] = host_counts.get(assigned['host'], 0) + 1
+        for gpu in candidates(execution_cfg, inv, job, host_counts):
             # Persist the target before sending anything to the server.
             job.update(status='dispatching', host=gpu['host'], gpu=gpu['uuid'],
                        gpu_name=gpu['name'], gpu_index=gpu['index'])
@@ -374,9 +428,10 @@ def sync_completed(cfg, queue):
         print(f'Syncing results: {source} -> {destination}', flush=True)
         try:
             destination.mkdir(parents=True, exist_ok=True)
-            result = subprocess.run(args, text=True, stdout=subprocess.PIPE,
-                                    stderr=subprocess.PIPE,
-                                    timeout=settings.get('timeout_seconds', 1800))
+            with ssh_connection_slot(source.split(':', 1)[0]):
+                result = subprocess.run(args, text=True, stdout=subprocess.PIPE,
+                                        stderr=subprocess.PIPE,
+                                        timeout=settings.get('timeout_seconds', 1800))
             if result.returncode:
                 raise RuntimeError(result.stderr.strip() or f'rsync exit {result.returncode}')
             outcome = dict(status='succeeded', completed=time.time())
@@ -658,6 +713,7 @@ def parser():
 def main():
     args = parser().parse_args()
     cfg = configuration(args.config)
+    configure_ssh(cfg, args.state_dir)
     queue = Queue(args.state_dir)
     if args.action == 'submit':
         job = new_job(cfg, dict(command=args.command, name=args.name,
@@ -693,7 +749,8 @@ def main():
     elif args.action == 'gpus':
         for host, data in inventory(project_configuration(
                 cfg, args.project or cfg.get('default_project'))).items():
-            print(host)
+            print(host + (f' jobs={data["host_occupied_jobs"]}/{data["host_max_jobs"]}'
+                          if data.get('host_max_jobs') is not None else ''))
             if 'error' in data:
                 print('  UNAVAILABLE: ' + data['error'])
             if not data.get('gpus') and 'error' not in data:

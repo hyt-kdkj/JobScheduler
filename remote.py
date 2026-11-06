@@ -301,6 +301,8 @@ def probe_running(req):
             used = 0
         active.setdefault(uuid, {})[pid] = used
     reserved = reservations()
+    host_jobs = sum(len(jobs) for jobs in reserved.values())
+    host_limit = req.get('max_jobs_per_host')
     gpus = []
     for row in csv.reader(io.StringIO(result.stdout)):
         if not row:
@@ -339,8 +341,10 @@ def probe_running(req):
         gpu['excluded'] = uuid in req.get('excluded_gpu_uuids', [])
         if gpu['excluded']:
             gpu['accepting_jobs'] = False
+        if host_limit is not None and host_jobs >= host_limit:
+            gpu['accepting_jobs'] = False
         gpus.append(gpu)
-    return {'gpus': gpus}
+    return {'gpus': gpus, 'host_occupied_jobs': host_jobs, 'host_max_jobs': host_limit}
 
 
 def runtime_image(req, template):

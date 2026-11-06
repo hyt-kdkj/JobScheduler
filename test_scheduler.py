@@ -4,6 +4,7 @@ import copy
 import io
 import json
 import os
+import select
 import shlex
 from pathlib import Path
 import shutil
@@ -19,12 +20,110 @@ import uuid
 import scheduler as s
 
 
+def fixture_configuration():
+    cfg = s.configuration(s.HERE / 'hosts.json')
+    # Tests exercise a second worktree independently of enabled user projects.
+    cfg['projects'].setdefault('V2VSimulator-division', dict(
+        container='v2vsimulator-division-v2v-dev-1',
+        workdir='/workspace/V2VSimulator/Simulator',
+        template_start_script='~/workspace/V2VSimulator-division/docker-shell.sh'))
+    return cfg
+
+
+class SSHConnectionLimitTest(unittest.TestCase):
+    CHILD = '''
+import sys
+from pathlib import Path
+import scheduler as s
+s.configure_ssh({'hosts': [{'ssh': sys.argv[2]}], 'max_ssh_connections': int(sys.argv[3])}, Path(sys.argv[1]))
+print('waiting', flush=True)
+sys.stdin.readline()
+with s.ssh_connection_slot(sys.argv[2]):
+    print('acquired', flush=True)
+    sys.stdin.readline()
+'''
+
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name)
+        for name, value in [('SSH_LOCK_DIRECTORY', self.root / 'ssh-connections'),
+                            ('SSH_CONNECTION_LIMITS', {})]:
+            patcher = patch.object(s, name, value)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
+    def child(self, host='a', limit=1):
+        process = subprocess.Popen([sys.executable, '-u', '-c', self.CHILD,
+                                    str(self.root), host, str(limit)], cwd=s.HERE,
+                                   stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                                   stderr=subprocess.PIPE, text=True)
+        def cleanup():
+            if process.poll() is None:
+                process.terminate()
+            process.communicate(timeout=5)
+        self.addCleanup(cleanup)
+        self.assert_line(process, 'waiting')
+        process.stdin.write('start\n')
+        process.stdin.flush()
+        return process
+
+    def assert_line(self, process, expected):
+        self.assertTrue(select.select([process.stdout], [], [], 5)[0], expected)
+        self.assertEqual(process.stdout.readline().strip(), expected)
+
+    def test_limits_are_shared_across_processes_and_allow_configured_slot_count(self):
+        from contextlib import ExitStack
+        for limit in (1, 2):
+            with self.subTest(limit=limit):
+                s.SSH_CONNECTION_LIMITS['a'] = limit
+                with ExitStack() as stack:
+                    for _ in range(limit):
+                        stack.enter_context(s.ssh_connection_slot('a'))
+                    process = self.child(limit=limit)
+                    self.assertFalse(select.select([process.stdout], [], [], 0.2)[0])
+                self.assert_line(process, 'acquired')
+                process.stdin.write('\n')
+                process.stdin.flush()
+                self.assertEqual(process.wait(timeout=5), 0)
+
+    def test_different_hosts_do_not_block_each_other(self):
+        with s.ssh_connection_slot('a'):
+            self.assert_line(self.child(host='b'), 'acquired')
+
+    def test_ssh_timeout_releases_the_slot(self):
+        with patch.object(s.subprocess, 'run', side_effect=subprocess.TimeoutExpired('ssh', 1)):
+            with self.assertRaises(RuntimeError):
+                s.remote('a', {'action': 'status'})
+        self.assert_line(self.child(), 'acquired')
+
+    def test_host_override_and_invalid_limits(self):
+        cfg = fixture_configuration()
+        cfg['max_ssh_connections'] = 2
+        cfg['hosts'][0]['max_ssh_connections'] = 1
+        s.configure_ssh(cfg, self.root)
+        self.assertEqual(s.SSH_CONNECTION_LIMITS[cfg['hosts'][0]['ssh']], 1)
+        self.assertEqual(s.SSH_CONNECTION_LIMITS[cfg['hosts'][1]['ssh']], 2)
+        path = self.root / 'hosts.json'
+        for value in (0, -1, True, 1.5):
+            cfg['hosts'][0]['max_ssh_connections'] = value
+            path.write_text(json.dumps(cfg))
+            with self.assertRaisesRegex(ValueError, 'max_ssh_connections'):
+                s.configuration(path)
+
+
 class SchedulingTest(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.q = s.Queue(Path(self.temp.name))
-        self.cfg = s.configuration(s.HERE / 'hosts.json')
+        transport_path = patch.object(s, 'SSH_LOCK_DIRECTORY', Path(self.temp.name) / 'ssh')
+        transport_path.start()
+        self.addCleanup(transport_path.stop)
+        transport_limits = patch.object(s, 'SSH_CONNECTION_LIMITS', {})
+        transport_limits.start()
+        self.addCleanup(transport_limits.stop)
+        self.cfg = fixture_configuration()
         # Fixtures use these aliases independently of the user's enabled hosts.
         self.cfg['hosts'] = [{'ssh': host} for host in
                              ('glockenspiel', 'marimba', 'xylophone0', 'xylophone1', 'xylophone3')]
@@ -55,6 +154,47 @@ class SchedulingTest(unittest.TestCase):
         self.assertEqual(s.candidates(self.cfg, inv, job)[0]['host'], 'xylophone0')
         job['min_free_mib'] = 12000
         self.assertEqual(s.candidates(self.cfg, inv, job), [])
+
+    def test_host_limit_is_shared_across_gpus_and_projects(self):
+        cfg = dict(self.cfg, max_jobs_per_host=2,
+                   hosts=[{'ssh': 'marimba'}, {'ssh': 'xylophone0'}])
+        jobs = [s.new_job(cfg, dict(command='echo job', project=project))
+                for project in ('V2VSimulator', 'V2VSimulator-division') * 3]
+        self.q.add_many(jobs)
+        inv = {host: {'gpus': [self.gpu(host=host, uuid=f'GPU-{host}-{i}', index=i)
+                              for i in range(3)]}
+               for host in ('marimba', 'xylophone0')}
+        with patch.object(s, 'inventory', side_effect=lambda cfg: copy.deepcopy(inv)), \
+             patch.object(s, 'remote', return_value={'status': 'running'}) as remote, \
+             contextlib.redirect_stdout(io.StringIO()):
+            s.dispatch(cfg, self.q)
+        current = self.q.all()
+        for host in inv:
+            self.assertEqual(sum(j['status'] == 'running' and j.get('host') == host for j in current), 2)
+        self.assertEqual(sum(j['status'] == 'queued' for j in current), 2)
+        self.assertEqual(remote.call_count, 4)
+
+    def test_host_limit_respects_remote_reservations_and_local_uncertain_jobs(self):
+        cfg = dict(self.cfg, max_jobs_per_host=2)
+        job = self.job()
+        inv = {'xylophone0': {'gpus': [self.gpu()], 'host_occupied_jobs': 2}}
+        self.assertEqual(s.candidates(cfg, inv, job), [])
+        inv['xylophone0']['host_occupied_jobs'] = 0
+        self.assertEqual(s.candidates(cfg, inv, job, {'xylophone0': 3}), [])
+        self.assertEqual(len(s.candidates(cfg, inv, job, {'xylophone0': 1})), 1)
+
+    def test_host_limit_validation_and_forwarding(self):
+        cfg = copy.deepcopy(self.cfg)
+        cfg['max_jobs_per_host'] = 2
+        cfg['hosts'][0]['max_jobs_per_host'] = 1
+        self.assertEqual(s.host_request(cfg, cfg['hosts'][0]['ssh'])['max_jobs_per_host'], 1)
+        self.assertEqual(s.host_request(cfg, cfg['hosts'][1]['ssh'])['max_jobs_per_host'], 2)
+        path = Path(self.temp.name) / 'hosts.json'
+        for value in (0, -1, True, 1.5):
+            cfg['hosts'][0]['max_jobs_per_host'] = value
+            path.write_text(json.dumps(cfg))
+            with self.assertRaisesRegex(ValueError, 'max_jobs_per_host'):
+                s.configuration(path)
 
     def test_host_restriction(self):
         job = self.job()
@@ -396,6 +536,7 @@ class SchedulingTest(unittest.TestCase):
         argv = ['scheduler.py', '--state-dir', self.temp.name, 'submit',
                 '--project', 'V2VSimulator-division', '--queue-only', 'echo worktree']
         with patch.object(sys, 'argv', argv), patch.object(s, 'remote') as connect, \
+             patch.object(s, 'configuration', return_value=self.cfg), \
              contextlib.redirect_stdout(io.StringIO()):
             s.main()
         connect.assert_not_called()
@@ -426,7 +567,8 @@ class SchedulingTest(unittest.TestCase):
 
     def test_project_gpus_selects_template(self):
         argv = ['scheduler.py', '--state-dir', self.temp.name, 'gpus', '--project', 'V2VSimulator-division']
-        with patch.object(sys, 'argv', argv), patch.object(s, 'inventory', return_value={}) as probe:
+        with patch.object(sys, 'argv', argv), patch.object(s, 'inventory', return_value={}) as probe, \
+             patch.object(s, 'configuration', return_value=self.cfg):
             s.main()
         cfg = probe.call_args.args[0]
         self.assertEqual(s.host_request(cfg, 'marimba')['container'], 'v2vsimulator-division-v2v-dev-1')
@@ -1001,6 +1143,32 @@ else:
         self.assertEqual(sum(op[0] == 'commit' for op in operations), 1)
         self.assertEqual(sum(op[0] == 'run' for op in operations), 3)
 
+    def test_server_host_limit_rejects_a_third_job_on_another_gpu(self):
+        self.req.update(command='sleep 2', max_jobs_per_gpu=2, max_jobs_per_host=2)
+        first = self.ns['main'](self.req)
+        second_req = dict(self.req, id=uuid.uuid4().hex)
+        second = self.ns['main'](second_req)
+        third_req = dict(self.req, id=uuid.uuid4().hex, gpu='GPU-test-2')
+        self.assertEqual(first['status'], 'reserved')
+        self.assertEqual(second['status'], 'reserved')
+        self.assertEqual(self.ns['main'](third_req)['status'], 'busy')
+        self.assertFalse(self.ns['job_path'](third_req['id']).exists())
+        self.assertEqual(self.wait_result()['status'], 'succeeded')
+        self.req = second_req
+        self.assertEqual(self.wait_result()['status'], 'succeeded')
+        third_req['command'] = 'true'
+        self.req = third_req
+        self.assertEqual(self.ns['main'](third_req)['status'], 'reserved')
+        self.assertEqual(self.wait_result()['status'], 'succeeded')
+
+    def test_host_limit_counts_unknown_jobs_and_reservations_on_other_gpus(self):
+        reserved = {'GPU-absent': [dict(id='a', status='unknown', min_free_mib=2048),
+                                  dict(id='b', status='reserved', min_free_mib=2048)]}
+        with patch.dict(self.ns, reservations=lambda: reserved):
+            result = self.ns['probe_running'](dict(self.req, max_jobs_per_host=2))
+        self.assertEqual(result['host_occupied_jobs'], 2)
+        self.assertTrue(all(not gpu['accepting_jobs'] for gpu in result['gpus']))
+
     def test_two_concurrent_jobs_share_one_session_with_separate_windows(self):
         first = dict(self.req, command='sleep 1')
         second = dict(self.req, id=uuid.uuid4().hex, gpu='GPU-test-2', command='sleep 1')
@@ -1045,7 +1213,7 @@ else:
         self.assertNotEqual(commits[0][-1], commits[1][-1])
 
     def test_shared_project_job_keeps_execution_settings_on_another_pc(self):
-        cfg = s.configuration(s.HERE / 'hosts.json')
+        cfg = fixture_configuration()
         original = s.Queue(self.root / 'original-pc')
         other = s.Queue(self.root / 'other-pc')
         job = s.new_job(cfg, dict(command='echo shared-worktree', project='V2VSimulator-division'))
@@ -1123,7 +1291,7 @@ else:
         self.assertEqual(sum('redirect' in result for result in results), 1)
 
     def test_other_pc_can_import_and_cancel_published_waiting_job(self):
-        cfg = s.configuration(s.HERE / 'hosts.json')
+        cfg = fixture_configuration()
         a = s.Queue(self.root / 'pc-a')
         b = s.Queue(self.root / 'pc-b')
         job = s.new_job(cfg, dict(command='echo shared'))
@@ -1138,7 +1306,7 @@ else:
         self.assertEqual(b.get(job['id'])['status'], 'cancelled')
 
     def test_cancel_all_imports_shared_jobs_and_also_cancels_unpublished_local_jobs(self):
-        cfg = s.configuration(s.HERE / 'hosts.json')
+        cfg = fixture_configuration()
         a = s.Queue(self.root / 'pc-a')
         b = s.Queue(self.root / 'pc-b')
         shared = s.new_job(cfg, dict(command='echo shared'))
