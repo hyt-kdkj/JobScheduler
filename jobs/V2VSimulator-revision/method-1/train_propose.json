@@ -1,0 +1,26 @@
+{
+  "defaults": {
+    "project": "V2VSimulator-revision",
+    "host": "glockenspiel"
+  },
+  "jobs": [
+    {
+      "name": "train_propose_method1_{scenario}_{step}_{encoder}_initial-0.5",
+      "command": "python3 train_propose.py --method 1 --scenario {scenario} --step {step} --encoder {encoder} --epsilon-profile initial-0.5 --mode safe --option A --xla off",
+      "matrix": {
+        "scenario": [
+          "highway",
+          "urban"
+        ],
+        "step": [
+          10,
+          20,
+          30
+        ],
+        "encoder": [
+          "Transformer"
+        ]
+      }
+    }
+  ]
+}

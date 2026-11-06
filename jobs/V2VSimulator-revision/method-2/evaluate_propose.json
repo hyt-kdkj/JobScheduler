@@ -1,0 +1,44 @@
+{
+  "defaults": {
+    "project": "V2VSimulator-revision",
+    "host": "glockenspiel"
+  },
+  "jobs": [
+    {
+      "name": "eval_propose_method2_highway_{step}_{num_vehicles}_{encoder}_initial-0.5",
+      "command": "python3 -c 'import json,sys; from pathlib import Path; from utils.config_resolver import method_name,method_storage_key,training_experiment_name; from utils.epsilon_profiles import epsilon_profile_name; n=method_name(step={step},encoder=\"{encoder}\",method=2); k=method_storage_key(n); p=Path(\"save_model\")/k/epsilon_profile_name(training_experiment_name(n,\"highway\",120)+\"_traffic_safe_optionA\",\"initial-0.5\"); m=json.loads((p/\"metadata_sim_0_149999.json\").read_text()); files=(\"eval_net_sim_0_149999.keras\",\"target_net_sim_0_149999.keras\",\"cooperation_eval_sim_0_149999.weights.h5\",\"cooperation_target_sim_0_149999.weights.h5\"); valid=m.get(\"cooperation_method\")==2 and m.get(\"slot\")==149999 and all((p/f).is_file() for f in files); sys.exit(0 if valid else \"Incomplete method 2 checkpoint: \"+str(p))' && python3 evaluate_methods.py --agents Propose --method 2 --scenario highway --step {step} --encoder {encoder} --epsilon-profile initial-0.5 --mode safe --option A --xla off --num-vehicles {num_vehicles} --model highway:120 --load-slot 149999",
+      "matrix": {
+        "step": [
+          10,
+          20,
+          30
+        ],
+        "num_vehicles": [
+          120,
+          360
+        ],
+        "encoder": [
+          "Transformer"
+        ]
+      }
+    },
+    {
+      "name": "eval_propose_method2_urban_{step}_{num_vehicles}_{encoder}_initial-0.5",
+      "command": "python3 -c 'import json,sys; from pathlib import Path; from utils.config_resolver import method_name,method_storage_key,training_experiment_name; from utils.epsilon_profiles import epsilon_profile_name; n=method_name(step={step},encoder=\"{encoder}\",method=2); k=method_storage_key(n); p=Path(\"save_model\")/k/epsilon_profile_name(training_experiment_name(n,\"urban\",200)+\"_traffic_safe_optionA\",\"initial-0.5\"); m=json.loads((p/\"metadata_sim_0_149999.json\").read_text()); files=(\"eval_net_sim_0_149999.keras\",\"target_net_sim_0_149999.keras\",\"cooperation_eval_sim_0_149999.weights.h5\",\"cooperation_target_sim_0_149999.weights.h5\"); valid=m.get(\"cooperation_method\")==2 and m.get(\"slot\")==149999 and all((p/f).is_file() for f in files); sys.exit(0 if valid else \"Incomplete method 2 checkpoint: \"+str(p))' && python3 evaluate_methods.py --agents Propose --method 2 --scenario urban --step {step} --encoder {encoder} --epsilon-profile initial-0.5 --mode safe --option A --xla off --num-vehicles {num_vehicles} --model urban:200 --load-slot 149999",
+      "matrix": {
+        "step": [
+          10,
+          20,
+          30
+        ],
+        "num_vehicles": [
+          200,
+          500
+        ],
+        "encoder": [
+          "Transformer"
+        ]
+      }
+    }
+  ]
+}
