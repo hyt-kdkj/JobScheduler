@@ -45,3 +45,29 @@ python3 scheduler.py submit-batch jobs/V2VSimulator-revision/initial-0.3/evaluat
 各ディレクトリには、学習6件・通常測定12件・詳細解析12件・通常描画4件・詳細描画4件の別々のJSONがある。
 学習と測定を混在させた一括JSONは廃止し、測定は対応する学習が完了してから投入する。
 測定はinitial-0.5の学習完了済みslot 149999を要求する。ファイル変更のみでジョブ投入は行わない。
+
+## 固定モデルを使う method 3・4
+
+[method-3](method-3/README.md)はIDEAS.mdの順位1位・α7（選択確率を保つ抽選結合）、
+[method-4](method-4/README.md)は順位2位・α6（合成干渉の条件付き通知）。
+**method 0の既存モデルを使う評価時の拡張で、追加学習は不要。**
+両方ともinitial-0.5・Transformerのみ、履歴長10・20・30、mode=safe、option=A、XLA=off。
+highway 120台／urban 200台のmethod 0のslot 149999を、対応する各2密度で評価する。
+
+各ディレクトリに基底モデル学習6件・通常評価12件・詳細解析12件・通常描画4件・
+詳細描画4件の計38ジョブを定義した5つのJSONを用意する。
+`train_propose.json`は明示的に`--method 0`を指定し、共通の基底モデルを学習する。
+method-3とmethod-4のtrainは同じ保存先なので、基底モデルが未学習の場合に
+どちらか一方だけを使う。既存モデルがあれば学習を省略できる。
+描画はSPS・IPMI・method 0・対象methodを比較し、履歴長10・20・30もまとめて表示する。
+既存の測定が不足していれば描画時に補うため、対応する評価完了後に描画を投入する。
+同条件のmethod-3/4描画は比較図・比較CSVの出力先を共有するため、同時投入しない。
+両方の図を残す場合は先の出力を別の場所へ保存する。元測定レコードは方式別に残る。
+
+```bash
+python3 scheduler.py submit-batch jobs/V2VSimulator-revision/method-3/evaluate_propose_analysis.json --dry-run
+python3 scheduler.py submit-batch jobs/V2VSimulator-revision/method-4/evaluate_propose_analysis.json --dry-run
+```
+
+投入時は対象コマンドから`--dry-run`を外す。method 3/4のソースをサーバー側へ
+配置してから利用する。ジョブ定義の作成だけでは登録・実行しない。

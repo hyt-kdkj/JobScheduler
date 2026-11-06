@@ -2,7 +2,7 @@
 
 ジョブ定義は `jobs/V2VSimulator/` と `jobs/V2VSimulator-revision/` に分けています。`JobScheduler/` 内で実行します。
 
-各 JSON の `defaults.project` に対象プロジェクトを設定しているため、ファイルを指定するだけで対応する環境に投入できます。revision 側は現行のPropose用CLIに合わせた定義とSPS・IPMIのbaseline評価定義で、Proposeのstepは10・20・30・40です。ファイル一覧・使い方は[revision用README](V2VSimulator-revision/README.md)を参照してください。以下の旧Transformer・LSTMの説明はV2VSimulator向けです。
+各 JSON の `defaults.project` に対象プロジェクトを設定しているため、ファイルを指定するだけで対応する環境に投入できます。revision 側は現行のPropose用CLIに合わせた定義とSPS・IPMIのbaseline評価定義で、Proposeのstepは10・20・30です。method 3・4は既存method 0のモデルを使う評価・描画用バッチです。ファイル一覧・使い方は[revision用README](V2VSimulator-revision/README.md)を参照してください。以下の旧Transformer・LSTMの説明はV2VSimulator向けです。
 
 ```bash
 python3 scheduler.py submit-batch jobs/V2VSimulator/train_transformer.json --dry-run
