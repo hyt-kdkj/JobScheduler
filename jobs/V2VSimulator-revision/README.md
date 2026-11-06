@@ -42,6 +42,6 @@ python3 scheduler.py submit-batch jobs/V2VSimulator-revision/initial-0.3/evaluat
 [method-1](method-1/README.md)（案A）と[method-2](method-2/README.md)（案B）を用意。
 両方とも **initial-0.5・Transformerのみ**、履歴長10・20・30、実行先はglockenspielに固定。
 既存のinitial-0.5のmethod 0を読み込んで協調枝を学習する。method 0の学習ジョブは含めない。
-各ディレクトリには、学習6件・通常測定12件・詳細解析12件の別々のJSONがある。
+各ディレクトリには、学習6件・通常測定12件・詳細解析12件・通常描画4件・詳細描画4件の別々のJSONがある。
 学習と測定を混在させた一括JSONは廃止し、測定は対応する学習が完了してから投入する。
 測定はinitial-0.5の学習完了済みslot 149999を要求する。ファイル変更のみでジョブ投入は行わない。

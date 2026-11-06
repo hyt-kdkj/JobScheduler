@@ -18,6 +18,8 @@ method 1のモデル・結果はmethod 0とは別名で、保存名には
 | `train_propose.json` | highway 120台／urban 200台で学習 | 6 |
 | `evaluate_propose.json` | highway 120・360台／urban 200・500台、通常15 seed測定 | 12 |
 | `evaluate_propose_analysis.json` | 同じ4条件の詳細解析、seed 100 | 12 |
+| `plot.json` | 通常測定の比較描画、step 10・20・30を同じグラフに表示 | 4 |
+| `plot_analysis.json` | 詳細解析の比較描画、step 10・20・30を同じグラフに表示 | 4 |
 
 測定は完了した150,000 steps（slot 149999）に固定する。測定前にinitial-0.5の保存先で
 メタデータのmethod番号・slot、基底eval/targetと協調枝eval/targetの存在を確認する。
@@ -42,3 +44,21 @@ python3 scheduler.py submit-batch jobs/V2VSimulator-revision/method-1/evaluate_p
 Schedulerにはバッチ間の依存関係機能がないため、学習と測定を同時に投入しない。
 ソースは自動転送されない。method 1・2を実装した版をサーバー側へ配置してから投入する。
 これらのファイルの変更だけでは登録済みジョブの設定は変わらず、新しいジョブも投入しない。
+
+## 描画
+
+SPS・IPMI・Propose method 1を比較する。初期ε0.5・Transformerのみで、
+highway 120・360台／urban 200・500台をglockenspielで描画する。
+各ジョブは`--step 10 20 30`をまとめて指定し、履歴長ごとには分割しない。
+通常描画は15 seedの測定、詳細描画はanalysis seed 100を使用する。
+全履歴長のmethod 1のslot 149999が揃っていることを、評価バッチと同じ確認処理で検証する。
+不足する測定データは描画プログラムが自動で測定するため、対応する学習完了後に投入する。
+学習コマンドは描画バッチに含めない。
+
+```bash
+python3 scheduler.py submit-batch jobs/V2VSimulator-revision/method-1/plot.json --dry-run
+python3 scheduler.py submit-batch jobs/V2VSimulator-revision/method-1/plot_analysis.json --dry-run
+
+python3 scheduler.py submit-batch jobs/V2VSimulator-revision/method-1/plot.json
+python3 scheduler.py submit-batch jobs/V2VSimulator-revision/method-1/plot_analysis.json
+```

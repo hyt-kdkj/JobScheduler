@@ -1,0 +1,34 @@
+{
+  "defaults": {
+    "project": "V2VSimulator-revision",
+    "host": "glockenspiel"
+  },
+  "jobs": [
+    {
+      "name": "plot_propose_method1_highway_steps10to30_{num_vehicles}_analysis_{encoder}_initial-0.5",
+      "command": "python3 -c 'import json,sys; from pathlib import Path; from utils.config_resolver import method_name,method_storage_key,training_experiment_name; from utils.epsilon_profiles import epsilon_profile_name; n=method_name(step=10,encoder=\"{encoder}\",method=1); k=method_storage_key(n); p=Path(\"save_model\")/k/epsilon_profile_name(training_experiment_name(n,\"highway\",120)+\"_traffic_safe_optionA\",\"initial-0.5\"); m=json.loads((p/\"metadata_sim_0_149999.json\").read_text()); files=(\"eval_net_sim_0_149999.keras\",\"target_net_sim_0_149999.keras\",\"cooperation_eval_sim_0_149999.weights.h5\",\"cooperation_target_sim_0_149999.weights.h5\"); valid=m.get(\"cooperation_method\")==1 and m.get(\"slot\")==149999 and all((p/f).is_file() for f in files); sys.exit(0 if valid else \"Incomplete method 1 checkpoint: \"+str(p))' && python3 -c 'import json,sys; from pathlib import Path; from utils.config_resolver import method_name,method_storage_key,training_experiment_name; from utils.epsilon_profiles import epsilon_profile_name; n=method_name(step=20,encoder=\"{encoder}\",method=1); k=method_storage_key(n); p=Path(\"save_model\")/k/epsilon_profile_name(training_experiment_name(n,\"highway\",120)+\"_traffic_safe_optionA\",\"initial-0.5\"); m=json.loads((p/\"metadata_sim_0_149999.json\").read_text()); files=(\"eval_net_sim_0_149999.keras\",\"target_net_sim_0_149999.keras\",\"cooperation_eval_sim_0_149999.weights.h5\",\"cooperation_target_sim_0_149999.weights.h5\"); valid=m.get(\"cooperation_method\")==1 and m.get(\"slot\")==149999 and all((p/f).is_file() for f in files); sys.exit(0 if valid else \"Incomplete method 1 checkpoint: \"+str(p))' && python3 -c 'import json,sys; from pathlib import Path; from utils.config_resolver import method_name,method_storage_key,training_experiment_name; from utils.epsilon_profiles import epsilon_profile_name; n=method_name(step=30,encoder=\"{encoder}\",method=1); k=method_storage_key(n); p=Path(\"save_model\")/k/epsilon_profile_name(training_experiment_name(n,\"highway\",120)+\"_traffic_safe_optionA\",\"initial-0.5\"); m=json.loads((p/\"metadata_sim_0_149999.json\").read_text()); files=(\"eval_net_sim_0_149999.keras\",\"target_net_sim_0_149999.keras\",\"cooperation_eval_sim_0_149999.weights.h5\",\"cooperation_target_sim_0_149999.weights.h5\"); valid=m.get(\"cooperation_method\")==1 and m.get(\"slot\")==149999 and all((p/f).is_file() for f in files); sys.exit(0 if valid else \"Incomplete method 1 checkpoint: \"+str(p))' && python3 plot_evaluation.py --agents SPS IPMI Propose --method 1 --scenario highway --step 10 20 30 --num-vehicles {num_vehicles} --encoder {encoder} --epsilon-profile initial-0.5 --mode safe --option A --xla off --model highway:120 --load-slot 149999 --analysis-only --analysis-seed 100",
+      "matrix": {
+        "num_vehicles": [
+          120,
+          360
+        ],
+        "encoder": [
+          "Transformer"
+        ]
+      }
+    },
+    {
+      "name": "plot_propose_method1_urban_steps10to30_{num_vehicles}_analysis_{encoder}_initial-0.5",
+      "command": "python3 -c 'import json,sys; from pathlib import Path; from utils.config_resolver import method_name,method_storage_key,training_experiment_name; from utils.epsilon_profiles import epsilon_profile_name; n=method_name(step=10,encoder=\"{encoder}\",method=1); k=method_storage_key(n); p=Path(\"save_model\")/k/epsilon_profile_name(training_experiment_name(n,\"urban\",200)+\"_traffic_safe_optionA\",\"initial-0.5\"); m=json.loads((p/\"metadata_sim_0_149999.json\").read_text()); files=(\"eval_net_sim_0_149999.keras\",\"target_net_sim_0_149999.keras\",\"cooperation_eval_sim_0_149999.weights.h5\",\"cooperation_target_sim_0_149999.weights.h5\"); valid=m.get(\"cooperation_method\")==1 and m.get(\"slot\")==149999 and all((p/f).is_file() for f in files); sys.exit(0 if valid else \"Incomplete method 1 checkpoint: \"+str(p))' && python3 -c 'import json,sys; from pathlib import Path; from utils.config_resolver import method_name,method_storage_key,training_experiment_name; from utils.epsilon_profiles import epsilon_profile_name; n=method_name(step=20,encoder=\"{encoder}\",method=1); k=method_storage_key(n); p=Path(\"save_model\")/k/epsilon_profile_name(training_experiment_name(n,\"urban\",200)+\"_traffic_safe_optionA\",\"initial-0.5\"); m=json.loads((p/\"metadata_sim_0_149999.json\").read_text()); files=(\"eval_net_sim_0_149999.keras\",\"target_net_sim_0_149999.keras\",\"cooperation_eval_sim_0_149999.weights.h5\",\"cooperation_target_sim_0_149999.weights.h5\"); valid=m.get(\"cooperation_method\")==1 and m.get(\"slot\")==149999 and all((p/f).is_file() for f in files); sys.exit(0 if valid else \"Incomplete method 1 checkpoint: \"+str(p))' && python3 -c 'import json,sys; from pathlib import Path; from utils.config_resolver import method_name,method_storage_key,training_experiment_name; from utils.epsilon_profiles import epsilon_profile_name; n=method_name(step=30,encoder=\"{encoder}\",method=1); k=method_storage_key(n); p=Path(\"save_model\")/k/epsilon_profile_name(training_experiment_name(n,\"urban\",200)+\"_traffic_safe_optionA\",\"initial-0.5\"); m=json.loads((p/\"metadata_sim_0_149999.json\").read_text()); files=(\"eval_net_sim_0_149999.keras\",\"target_net_sim_0_149999.keras\",\"cooperation_eval_sim_0_149999.weights.h5\",\"cooperation_target_sim_0_149999.weights.h5\"); valid=m.get(\"cooperation_method\")==1 and m.get(\"slot\")==149999 and all((p/f).is_file() for f in files); sys.exit(0 if valid else \"Incomplete method 1 checkpoint: \"+str(p))' && python3 plot_evaluation.py --agents SPS IPMI Propose --method 1 --scenario urban --step 10 20 30 --num-vehicles {num_vehicles} --encoder {encoder} --epsilon-profile initial-0.5 --mode safe --option A --xla off --model urban:200 --load-slot 149999 --analysis-only --analysis-seed 100",
+      "matrix": {
+        "num_vehicles": [
+          200,
+          500
+        ],
+        "encoder": [
+          "Transformer"
+        ]
+      }
+    }
+  ]
+}
