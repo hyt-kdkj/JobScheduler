@@ -62,6 +62,11 @@ def configuration(path):
     if shared and (not isinstance(shared, dict) or shared.get('host') not in names):
         raise ValueError('shared_queue.host must name a configured SSH host')
     for entry in [cfg] + cfg['hosts']:
+        excluded = entry.get('excluded_gpu_uuids', [])
+        if not isinstance(excluded, list) or any(
+                not isinstance(value, str) or not value.startswith('GPU-') or len(value) <= 4
+                for value in excluded):
+            raise ValueError('excluded_gpu_uuids must be a list of GPU UUIDs')
         limit = entry.get('max_jobs_per_gpu', cfg.get('max_jobs_per_gpu', 1))
         if not isinstance(limit, int) or isinstance(limit, bool) or limit < 1:
             raise ValueError('max_jobs_per_gpu must be a positive integer')
@@ -109,6 +114,7 @@ def host_request(cfg, host):
         result['template_start_script'] = entry.get('template_start_script', cfg.get('template_start_script'))
     for key, default in (('max_jobs_per_gpu', 1), ('gpu_memory_headroom_mib', 0)):
         result[key] = entry.get(key, cfg.get(key, default))
+    result['excluded_gpu_uuids'] = list(entry.get('excluded_gpu_uuids', cfg.get('excluded_gpu_uuids', [])))
     return result
 
 
@@ -132,8 +138,11 @@ def inventory(cfg):
 
 
 def candidates(cfg, inv, job):
+    excluded = {entry['ssh']: set(entry.get('excluded_gpu_uuids', cfg.get('excluded_gpu_uuids', [])))
+                for entry in cfg['hosts']}
     options = [gpu for host, data in inv.items() for gpu in data.get('gpus', [])
                if (not job.get('requested_host') or job['requested_host'] == host)
+               and gpu['uuid'] not in excluded.get(host, set())
                and gpu.get('accepting_jobs', gpu['idle'])
                and gpu.get('available_mib', gpu['total_mib'] - gpu['used_mib']) >= job['min_free_mib']]
     # Stable order for equal GPU models; priority is configurable, not a benchmark.
@@ -693,7 +702,7 @@ def main():
                 print(f'  GPU {g["index"]} {g["name"]}: '
                       f'{g["total_mib"] - g["used_mib"]}/{g["total_mib"]} MiB free, '
                       f'{g["utilization"]}% util, priority={g["priority"]}, '
-                      f'{"AVAILABLE" if g.get("accepting_jobs", g["idle"]) else "FULL"}, '
+                      f'{"EXCLUDED" if g.get("excluded") else "AVAILABLE" if g.get("accepting_jobs", g["idle"]) else "FULL"}, '
                       f'slots={g.get("occupied_slots", 0)}/{g.get("max_jobs", 1)}, '
                       f'budget={g.get("available_mib", g["total_mib"] - g["used_mib"])} MiB'
                       + (f' job={g["reserved_by"][:8]}' if g['reserved_by'] else ''))

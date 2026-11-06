@@ -62,6 +62,27 @@ class SchedulingTest(unittest.TestCase):
         inv = {'xylophone0': {'gpus': [self.gpu()]}}
         self.assertEqual(s.candidates(self.cfg, inv, job), [])
 
+    def test_host_gpu_exclusion_applies_to_saved_jobs_and_remote_requests(self):
+        entry = next(h for h in self.cfg['hosts'] if h['ssh'] == 'marimba')
+        entry['excluded_gpu_uuids'] = ['GPU-p100']
+        slow = self.gpu('Tesla P100', 'marimba', uuid='GPU-p100')
+        fast = self.gpu('Quadro RTX 6000', 'marimba', uuid='GPU-rtx')
+        job = s.new_job(self.cfg, dict(command='echo test'))
+        inv = {'marimba': {'gpus': [slow, fast]}}
+        self.assertEqual(s.candidates(self.cfg, inv, job), [fast])
+        saved_cfg = s.job_configuration(self.cfg, job)
+        self.assertEqual(s.host_request(saved_cfg, 'marimba')['excluded_gpu_uuids'], ['GPU-p100'])
+        self.assertEqual(s.host_request(saved_cfg, 'xylophone0')['excluded_gpu_uuids'], [])
+
+    def test_gpu_exclusion_configuration_rejects_malformed_values(self):
+        path = Path(self.temp.name) / 'hosts.json'
+        for invalid in ('GPU-p100', [0], ['']):
+            cfg = copy.deepcopy(self.cfg)
+            cfg['hosts'][0]['excluded_gpu_uuids'] = invalid
+            path.write_text(json.dumps(cfg))
+            with self.assertRaisesRegex(ValueError, 'excluded_gpu_uuids'):
+                s.configuration(path)
+
     def test_lost_launch_reply_retries_same_id_and_target(self):
         job = self.job()
         inv = {'xylophone0': {'gpus': [self.gpu()]}}
@@ -863,6 +884,19 @@ class DetachedLifecycleTest(unittest.TestCase):
         data = self.ns['main']({'action': 'status', 'id': self.req['id']})
         self.assertEqual(data['status'], 'unknown')
         self.assertEqual(self.ns['main'](dict(self.req, id=uuid.uuid4().hex))['status'], 'busy')
+
+    def test_excluded_gpu_is_visible_but_cannot_launch(self):
+        self.req['excluded_gpu_uuids'] = ['GPU-test']
+        result = self.ns['main'](dict(self.req, action='probe'))
+        first, second = result['gpus']
+        self.assertTrue(first['excluded'])
+        self.assertFalse(first['accepting_jobs'])
+        self.assertFalse(second['excluded'])
+        self.assertTrue(second['accepting_jobs'])
+        self.assertEqual(self.ns['main'](self.req)['status'], 'busy')
+        self.req['gpu'] = 'GPU-test-2'
+        self.assertEqual(self.ns['main'](self.req)['status'], 'reserved')
+        self.assertEqual(self.wait_result()['status'], 'succeeded')
 
     def test_recovered_monitor_collects_logs_and_failure_without_relaunch(self):
         directory = self.ns['job_path'](self.req['id'])

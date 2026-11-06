@@ -8,11 +8,6 @@
       "workdir": "/workspace/V2VSimulator/Simulator",
       "template_start_script": "~/workspace/V2VSimulator/docker-shell.sh"
     },
-    "V2VSimulator-division": {
-      "container": "v2vsimulator-division-v2v-dev-1",
-      "workdir": "/workspace/V2VSimulator/Simulator",
-      "template_start_script": "~/workspace/V2VSimulator-division/docker-shell.sh"
-    },
     "V2VSimulator-revision": {
       "container": "v2vsimulator-revision-v2v-dev-1",
       "workdir": "/workspace/V2VSimulator/Simulator",
@@ -38,16 +33,16 @@
       "ssh": "glockenspiel"
     },
     {
-      "ssh": "marimba"
+      "ssh": "marimba",
+      "excluded_gpu_uuids": [
+        "GPU-a333b701-8be1-359d-88ea-25b57b46fba9"
+      ]
     },
     {
       "ssh": "xylophone0"
     },
     {
       "ssh": "xylophone1"
-    },
-    {
-      "ssh": "xylophone3"
     }
   ]
 }

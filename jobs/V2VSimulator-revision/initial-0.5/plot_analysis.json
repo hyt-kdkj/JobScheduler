@@ -12,8 +12,7 @@
           360
         ],
         "encoder": [
-          "Transformer",
-          "no"
+          "Transformer"
         ],
         "epsilon_profile": [
           "initial-0.5"
@@ -29,8 +28,7 @@
           500
         ],
         "encoder": [
-          "Transformer",
-          "no"
+          "Transformer"
         ],
         "epsilon_profile": [
           "initial-0.5"

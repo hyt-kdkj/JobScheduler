@@ -17,8 +17,7 @@
           30
         ],
         "encoder": [
-          "Transformer",
-          "no"
+          "Transformer"
         ],
         "epsilon_profile": [
           "initial-0.5"

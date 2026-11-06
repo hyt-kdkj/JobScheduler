@@ -182,6 +182,8 @@ python3 scheduler.py gpus
 
 `max_jobs_per_gpu` と `gpu_memory_headroom_mib` で上限・余裕を変更できます。必要 VRAM は投入判断用で、実行時の使用量を制限しません。割当ては `CUDA_VISIBLE_DEVICES` で行うため、学習コマンドの `--gpu` は省略するか `auto` にしてください。
 
+ホスト設定の `excluded_gpu_uuids` に指定した GPU は新規投入から除外し、`gpus` では `EXCLUDED` と表示します。marimba は Tesla P100（GPU 0）を除外し、Quadro RTX 6000（GPU 1）のみを使用します。登録済みの待機ジョブにも適用し、実行中のジョブは継続します。
+
 ### ドライバ不一致への対応
 
 カーネルドライバと同じ版の `/opt/nvidia-driver-<版>/lib` がコンテナ内にあれば、`LD_LIBRARY_PATH` を自動設定します。各 tmux ウィンドウでの export は不要です。
