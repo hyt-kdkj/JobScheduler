@@ -844,6 +844,49 @@ class MonitorRecoveryTest(unittest.TestCase):
         self.info = dict(State=dict(Running=True), Config=dict(Labels={
             'job-scheduler.id': self.job_id}))
 
+    def test_legacy_worker_cleanup_is_redirected_without_changing_running_command(self):
+        req = dict(self.data, container='manual-template', command='training command')
+        self.r.save(self.directory / 'request.json', req)
+        (self.directory / 'worker.py').write_text('def finish_job():\n    stop_template(req)\n')
+        with patch.object(self.r, 'inspect_job_container', return_value=self.info):
+            result = self.r.protect_templates()
+        self.assertEqual(result, dict(protected=[self.job_id], errors=[]))
+        changed = json.loads((self.directory / 'request.json').read_text())
+        self.assertEqual(changed['container'], req['job_container'])
+        self.assertEqual(changed['legacy_template_container'], 'manual-template')
+        self.assertEqual(changed['command'], req['command'])
+        self.assertEqual(changed['job_container'], req['job_container'])
+        backup = Path(self.temp.name) / '.template-protection-backups' / (self.job_id + '.json')
+        self.assertEqual(json.loads(backup.read_text()), req)
+        self.assertEqual(self.r.protect_templates(), dict(protected=[], errors=[]))
+
+    def test_legacy_protection_skips_unstarted_jobs_and_current_workers(self):
+        req = dict(self.data, container='manual-template')
+        self.r.save(self.directory / 'request.json', req)
+        (self.directory / 'worker.py').write_text('def finish_job():\n    stop_template(req)\n')
+        with patch.object(self.r, 'inspect_job_container', return_value=None):
+            self.assertEqual(self.r.protect_templates(), dict(protected=[], errors=[]))
+        (self.directory / 'worker.py').write_text(Path(self.r.__file__).read_text())
+        with patch.object(self.r, 'inspect_job_container') as inspect:
+            self.assertEqual(self.r.protect_templates(), dict(protected=[], errors=[]))
+            inspect.assert_not_called()
+        self.assertEqual(json.loads((self.directory / 'request.json').read_text()), req)
+
+    def test_probe_leaves_started_template_running_even_on_inspection_failure(self):
+        for error in (False, True):
+            with contextlib.ExitStack() as stack:
+                stack.enter_context(patch.object(self.r, 'template_lock', contextlib.nullcontext))
+                stack.enter_context(patch.object(self.r, 'ensure_template', return_value=False))
+                probe = stack.enter_context(patch.object(self.r, 'probe_running', return_value={'gpus': []}))
+                run = stack.enter_context(patch.object(self.r, 'run'))
+                if error:
+                    probe.side_effect = RuntimeError('GPU inspection failed')
+                    with self.assertRaisesRegex(RuntimeError, 'GPU inspection failed'):
+                        self.r.probe({})
+                else:
+                    self.assertEqual(self.r.probe({}), {'gpus': []})
+                run.assert_not_called()
+
     def test_missing_tmux_falls_back_to_owned_running_container(self):
         for state in ('running', 'unknown'):
             self.r.save(self.directory / 'status.json', dict(self.data, status=state))
@@ -979,7 +1022,7 @@ class DetachedLifecycleTest(unittest.TestCase):
                                       ('job-scheduler-' + self.req['id'])).exists())
                     template_marker = ('worktree3-template-stopped'
                                        if self.req['container'] == 'test-worktree3' else 'template-stopped')
-                    self.assertTrue((self.root / 'docker-state' / template_marker).exists())
+                    self.assertFalse((self.root / 'docker-state' / template_marker).exists())
                 return data
             time.sleep(0.05)
         self.fail('Detached worker did not finish: ' + repr(data))
@@ -1229,10 +1272,15 @@ else:
         self.assertEqual(s.launch_request(cfg, imported)['container'], 'v2vsimulator-division-v2v-dev-1')
 
     def test_stopped_template_can_probe_and_launch_the_next_job(self):
+        state = self.root / 'docker-state'
+        state.mkdir()
+        (state / 'template-stopped').touch()
+        self.assertEqual(len(self.ns['main'](dict(self.req, action='probe'))['gpus']), 2)
+        self.assertFalse((state / 'template-stopped').exists())
         self.ns['main'](self.req)
         self.assertEqual(self.wait_result()['status'], 'succeeded')
         self.assertEqual(len(self.ns['main'](dict(self.req, action='probe'))['gpus']), 2)
-        self.assertTrue((self.root / 'docker-state/template-stopped').exists())
+        self.assertFalse((self.root / 'docker-state/template-stopped').exists())
         self.req = dict(self.req, id=uuid.uuid4().hex)
         self.assertEqual(self.ns['main'](self.req)['status'], 'reserved')
         self.assertEqual(self.wait_result()['status'], 'succeeded')
@@ -1256,20 +1304,22 @@ else:
         self.req = dict(self.req, id=uuid.uuid4().hex)
         self.assertEqual(self.ns['main'](self.req)['status'], 'reserved')
         self.assertEqual(self.wait_result()['status'], 'succeeded')
-        self.assertEqual((state / 'template-starts').read_text(), 'startedstarted')
+        self.assertEqual((state / 'template-starts').read_text(), 'started')
 
-    def test_template_stop_failure_preserves_job_exit_result(self):
+    def test_job_completion_preserves_template_for_manual_use(self):
         directory = self.root / 'finish-test'
         directory.mkdir()
         (directory / 'request.json').write_text(json.dumps(dict(self.req, job_container='owned')))
-        data = dict(status='succeeded', exit_code=0, session='unused')
-        with patch.dict(self.ns, stop_template=lambda req: (_ for _ in ()).throw(
-                RuntimeError('stop failed')), tmux=lambda args: None, run=lambda args: None):
-            self.ns['finish_job'](directory, data)
-        saved = json.loads((directory / 'status.json').read_text())
-        self.assertEqual(saved['status'], 'succeeded')
-        self.assertEqual(saved['exit_code'], 0)
-        self.assertEqual(saved['template_cleanup_error'], 'stop failed')
+        for status, code in (('succeeded', 0), ('failed', 7), ('cancelled', 143)):
+            data = dict(status=status, exit_code=code, window_id='@123')
+            with patch.dict(self.ns, tmux=lambda args: None), \
+                 patch.object(subprocess, 'run') as run:
+                self.ns['finish_job'](directory, data)
+            run.assert_not_called()
+            saved = json.loads((directory / 'status.json').read_text())
+            self.assertEqual(saved['status'], status)
+            self.assertEqual(saved['exit_code'], code)
+
     def test_san_queue_claim_prevents_two_pcs_dispatching_same_job(self):
         job = dict(id=self.req['id'], created=time.time(), status='queued',
                    command='echo shared', name='shared', requested_host=None, min_free_mib=2048)

@@ -258,26 +258,12 @@ def ensure_template(req):
     return bool(was_running)
 
 
-def stop_template(req):
-    with template_lock():
-        if template_running(req):
-            result = run(['docker', 'stop', '--time', '10', req['container']])
-            if result.returncode:
-                raise RuntimeError('Cannot stop template container: ' + result.stderr.strip())
-
-
 def probe(req):
-    # GPU inspection uses docker exec. Temporarily restart a stopped template,
-    # and serialize against workers stopping it or taking an image snapshot.
+    # The template also hosts manual shells and commands. Leave it running
+    # after inspection so another user's session cannot be interrupted.
     with template_lock():
-        was_running = ensure_template(req)
-        try:
-            return probe_running(req)
-        finally:
-            if not was_running:
-                result = run(['docker', 'stop', '--time', '10', req['container']])
-                if result.returncode:
-                    raise RuntimeError('Cannot stop template container: ' + result.stderr.strip())
+        ensure_template(req)
+        return probe_running(req)
 
 
 def probe_running(req):
@@ -431,6 +417,44 @@ def inspect_job_container(req):
 
 def owned_container(req):
     return inspect_job_container(req) is not None
+
+
+def protect_templates():
+    """Prevent already-running legacy workers from stopping manual sessions."""
+    protected, errors = [], []
+    for path in root_dir().glob('*/status.json'):
+        try:
+            data = json.loads(path.read_text())
+            if data['status'] not in ('running', 'unknown') or not data.get('job_container'):
+                continue
+            directory = path.parent
+            sources = [p.read_text() for p in (directory / 'worker.py', directory / 'monitor.py')
+                       if p.exists()]
+            if not any(re.search(r'^\s+stop_template\(req\)\s*$', source, re.M) for source in sources):
+                continue
+            request_path = directory / 'request.json'
+            req = json.loads(request_path.read_text())
+            if req['container'] == req.get('job_container'):
+                continue
+            info = inspect_job_container(req)
+            if not info or not info['State'].get('Running'):
+                continue
+            backups = root_dir() / '.template-protection-backups'
+            backups.mkdir(mode=0o700, exist_ok=True)
+            backup = backups / (req['id'] + '.json')
+            if not backup.exists():
+                save(backup, req)
+            # A legacy worker has already loaded its execution request in memory.
+            # Its finish_job re-reads request.json only for template cleanup.
+            # Redirect that cleanup to its own disposable job container (normally
+            # already removed), leaving the actual template and training intact.
+            req['legacy_template_container'] = req['container']
+            req['container'] = req['job_container']
+            save(request_path, req)
+            protected.append(req['id'])
+        except Exception as exc:
+            errors.append(dict(id=path.parent.name, error=str(exc)))
+    return dict(protected=protected, errors=errors)
 
 
 def recover(job_id):
@@ -641,14 +665,8 @@ def watch_cancel(req, directory, stopped):
 
 
 def finish_job(directory, data):
-    if data['status'] in ('succeeded', 'failed', 'cancelled'):
-        try:
-            req = json.loads((directory / 'request.json').read_text())
-            if req.get('job_container'):
-                stop_template(req)
-        except Exception as exc:
-            # Template cleanup must not change the job's actual exit result.
-            data['template_cleanup_error'] = str(exc)
+    # Only the job's own container is cleaned up by its worker. The shared
+    # template may contain a manual evaluation and must never be stopped here.
     # Persist the result first: killing our own tmux session can terminate us.
     save(directory / 'status.json', data)
     if data['status'] in ('succeeded', 'failed', 'cancelled'):
@@ -724,6 +742,8 @@ def main(req):
         action = req['action']
         if action == 'probe':
             return probe(req)
+        if action == 'protect_templates':
+            return protect_templates()
         if action == 'shared_sync':
             return shared_sync(req.get('jobs', []))
         if action == 'shared_cancel':
