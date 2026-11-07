@@ -1,0 +1,35 @@
+{
+  "defaults": {
+    "project": "V2VSimulator-revision"
+  },
+  "jobs": [
+    {
+      "name": "train_propose_method5_highway_{step}_{encoder}_initial-0.5",
+      "command": "python3 train_propose.py --method 5 --scenario highway --num-vehicles 120 --step {step} --encoder {encoder} --epsilon-profile initial-0.5 --mode safe --option A --xla off",
+      "matrix": {
+        "step": [
+          10,
+          20,
+          30
+        ],
+        "encoder": [
+          "Transformer"
+        ]
+      }
+    },
+    {
+      "name": "train_propose_method5_urban_{step}_{encoder}_initial-0.5",
+      "command": "python3 train_propose.py --method 5 --scenario urban --num-vehicles 200 --step {step} --encoder {encoder} --epsilon-profile initial-0.5 --mode safe --option A --xla off",
+      "matrix": {
+        "step": [
+          10,
+          20,
+          30
+        ],
+        "encoder": [
+          "Transformer"
+        ]
+      }
+    }
+  ]
+}

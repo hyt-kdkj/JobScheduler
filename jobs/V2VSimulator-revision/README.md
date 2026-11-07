@@ -71,3 +71,19 @@ python3 scheduler.py submit-batch jobs/V2VSimulator-revision/method-4/evaluate_p
 
 投入時は対象コマンドから`--dry-run`を外す。method 3/4のソースをサーバー側へ
 配置してから利用する。ジョブ定義の作成だけでは登録・実行しない。
+
+
+## 学習から協調情報を使う method 5
+
+[method-5](method-5/README.md)は、CAMで受信した予告を観測へ加えてEncoder・Qヘッドを同時に学習する。
+initial-0.5・Transformer・履歴長10/20/30、highway120台／urban200台で15万stepを新規学習し、
+専用method 5モデルのslot149999を対応する各2密度で評価する。
+学習6件・通常評価12件・詳細解析12件・通常描画4件・詳細描画4件の5つのJSONを用意する。
+描画はSPS・IPMI・method 0・method 5の比較。method 0のモデルへフォールバックしない。
+
+```bash
+python3 scheduler.py submit-batch jobs/V2VSimulator-revision/method-5/train_propose.json --dry-run
+```
+
+学習→評価→描画の順に、先の処理の完了後に次を投入する。バッチ間の依存関係は自動登録されない。
+定義を作成しただけではジョブを登録・実行しない。
