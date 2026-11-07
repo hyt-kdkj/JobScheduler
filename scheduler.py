@@ -506,6 +506,14 @@ def show_jobs(jobs, include_cancelled=True):
             print('  sync_error: ' + j['result_sync']['error'])
 
 
+def status_jobs(jobs, include_all=False, now=None):
+    if include_all:
+        return jobs
+    cutoff = (time.time() if now is None else now) - 2 * 24 * 60 * 60
+    return [j for j in jobs if j['status'] not in ('failed', 'cancelled') and
+            (j['status'] not in TERMINAL or (j.get('finished') or j['created']) > cutoff)]
+
+
 def new_job(cfg, spec):
     allowed = {'command', 'name', 'host', 'min_free_gb', 'project'}
     if set(spec) - allowed:
@@ -693,7 +701,7 @@ def parser():
     s = sub.add_parser('status', help='Show completion state and exit codes')
     s.add_argument('--local', action='store_true', help='Show cached state without SSH')
     s.add_argument('--dispatch', action='store_true', help='Also try queued jobs once')
-    s.add_argument('--all', action='store_true', help='Include failed and cancelled jobs')
+    s.add_argument('--all', action='store_true', help='Include older history, failed and cancelled jobs')
     s = sub.add_parser('logs', help='Save the remote log tail to files, including after completion')
     s.add_argument('id', nargs='?')
     s.add_argument('--running', action='store_true', help='Get logs for all active jobs')
@@ -776,7 +784,7 @@ def main():
             refresh_shared(cfg, queue)
             refresh_status(queue)
             sync_completed(cfg, queue)
-        jobs = [j for j in queue.all() if args.all or j['status'] != 'failed']
+        jobs = status_jobs(queue.all(), include_all=args.all)
         show_jobs(jobs, include_cancelled=args.all)
     elif args.action == 'logs':
         if args.lines < 1:

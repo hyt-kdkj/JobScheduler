@@ -30,6 +30,46 @@ def fixture_configuration():
     return cfg
 
 
+class StatusHistoryTest(unittest.TestCase):
+    def test_two_day_cutoff_uses_finish_time_and_preserves_unfinished_jobs(self):
+        now = 1000000
+        cutoff = now - 172800
+        jobs = [dict(id='old', status='succeeded', created=1, finished=cutoff - 1),
+                dict(id='boundary', status='succeeded', created=1, finished=cutoff),
+                dict(id='recent', status='succeeded', created=1, finished=cutoff + 1),
+                dict(id='missing-finish', status='succeeded', created=1),
+                dict(id='null-finish', status='succeeded', created=1, finished=None),
+                dict(id='failed', status='failed', created=now),
+                dict(id='cancelled', status='cancelled', created=now)]
+        active = ('queued', 'running', 'reserved', 'dispatching', 'cancelling', 'unknown')
+        jobs.extend(dict(id=state, status=state, created=1) for state in active)
+        self.assertEqual([j['id'] for j in s.status_jobs(jobs, now=now)], ['recent', *active])
+        self.assertEqual(s.status_jobs(jobs, include_all=True, now=now), jobs)
+
+    def test_local_status_filters_history_and_all_restores_it_without_deleting(self):
+        with tempfile.TemporaryDirectory() as directory:
+            q = s.Queue(Path(directory))
+            now = time.time()
+            jobs = [dict(id=uuid.uuid4().hex, status=status, created=now - 300000,
+                         finished=now - age, command='echo test', name=name)
+                    for name, status, age in [('old-result', 'succeeded', 172801),
+                                               ('recent-result', 'succeeded', 1),
+                                               ('old-failure', 'failed', 172801)]]
+            q.add_many(jobs)
+            argv = ['scheduler.py', '--state-dir', directory, 'status', '--local']
+            with patch.object(sys, 'argv', argv), patch.object(s, 'remote') as remote, \
+                 contextlib.redirect_stdout(io.StringIO()) as output:
+                s.main()
+            remote.assert_not_called()
+            self.assertNotIn('old-result', output.getvalue())
+            self.assertIn('recent-result', output.getvalue())
+            with patch.object(sys, 'argv', argv + ['--all']), \
+                 contextlib.redirect_stdout(io.StringIO()) as output:
+                s.main()
+            self.assertTrue(all(j['name'] in output.getvalue() for j in jobs))
+            self.assertEqual(len(q.all()), 3)
+
+
 class SSHConnectionLimitTest(unittest.TestCase):
     CHILD = '''
 import sys
