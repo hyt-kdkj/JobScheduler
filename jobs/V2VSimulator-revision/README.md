@@ -9,15 +9,16 @@
 | ディレクトリ | 内容 |
 |---|---|
 | [method-0](method-0/README.md) | method 0の学習・通常評価・詳細解析・特徴量比較 |
-| [method-1](method-1/README.md) | method 1の学習・通常評価・詳細解析 |
-| [method-2](method-2/README.md) | method 2の学習・通常評価・詳細解析 |
+| [method-1](method-1/README.md) | 共通method 0の学習・100 ms以内の上位2候補予告の通常評価・詳細解析 |
+| [method-2](method-2/README.md) | 共通method 0の学習・100 ms以内の上位4候補予告の通常評価・詳細解析 |
 | [method-3](method-3/README.md) | 共通method 0の基底モデル学習・method 3の通常評価・詳細解析 |
 | [method-4](method-4/README.md) | 共通method 0の基底モデル学習・method 4の通常評価・詳細解析 |
 | [method-5](method-5/README.md) | method 5の学習・通常評価・詳細解析 |
 
 履歴長は20・30、初期εは0.5です。学習はhighway 120台／urban 200台、評価・描画はhighway 120・360台／urban 200・500台です。
-モデルの評価上限は150,000学習steps（slot 149999）。method 3/4はmethod 0の固定モデルを使うため追加学習は不要です。
-method-3/4の `train_propose.json` は同じ基底モデルを学習するので、必要な場合にどちらか一方を使います。
+モデルの評価上限は150,000学習steps（slot 149999）。method 1〜4はmethod 0の固定モデルを使うため追加学習は不要です。
+method-0/1/2/3/4のtrainは同じ基底モデルを学習するので、必要な場合に一つだけ使います。
+method 1/2は100 ms以内の一段階予告、method 3/4は120〜200 ms先の二段階抽選結合です。旧method 1/2の協調枝モデル・キャッシュは使いません。
 各構成・ジョブ数・前提条件はモデルごとのREADMEを参照してください。
 
 ## 共通baseline評価
