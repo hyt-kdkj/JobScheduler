@@ -55,8 +55,8 @@ python3 scheduler.py submit --project V2VSimulator-revision --name revision_trai
   'python3 train_propose.py --scenario highway --step 30'
 
 # 既存のバッチ定義を V2VSimulator-revision で実行する場合
-python3 scheduler.py submit-batch jobs/V2VSimulator-revision/initial-0.5/train_propose.json --dry-run
-python3 scheduler.py submit-batch jobs/V2VSimulator-revision/initial-0.5/train_propose.json
+python3 scheduler.py submit-batch jobs/V2VSimulator-revision/method-0/train_propose.json --dry-run
+python3 scheduler.py submit-batch jobs/V2VSimulator-revision/method-0/train_propose.json
 
 # 両プロジェクトの待機ジョブを処理・一覧表示
 python3 scheduler.py dispatch
@@ -150,6 +150,9 @@ python3 prepare_gpu_environment.py --install-driver-version 580.173.02
   ]
 }
 ```
+
+トップレベルの `parameters` は、全ジョブ共通の引数リストを指定します。例えば `"parameters": {"methods": [0, 3, 4]}` とし、コマンドに `--method {methods}` と書くと、`--method 0 3 4` に展開されます。`matrix` と違ってジョブ数は増えません。
+各要素は1つのシェル引数として引用されるため、プレースホルダーはコマンド内で引用符で囲まずに使ってください。値は空でないスカラーのリストで指定し、`matrix` と同じ変数名は使えません。
 
 `jobs` に異なるコマンドを複数並べても構いません。各ジョブの `host` で実行先を限定し、`min_free_gb` で必要 VRAM（既定2 GiB）を指定できます。トップレベルの `defaults` は全ジョブ共通の省略値です。保存後は `--dry-run` で確認してください。
 

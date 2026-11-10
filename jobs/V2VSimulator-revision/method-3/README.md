@@ -7,7 +7,7 @@ IDEAS.mdの順位1位・α7：選択確率を保つ抽選結合。
 method-3とmethod-4のtrainは同じmethod 0の保存先を使うため、基底モデルが
 未学習の場合にどちらか一方だけを投入する。既存モデルがあれば学習を省略できる。
 
-既存method-1/2と同じく **initial-0.5・Transformerのみ**、履歴長10・20・30、
+既存method-1/2と同じく **initial-0.5・Transformerのみ**、履歴長20・30、
 mode=safe、option=A、XLA=off。利用可能な全サーバーから実行先を自動選択する。
 highwayは120台で学習したモデルを120・360台で、urbanは200台で学習した
 モデルを200・500台で評価する。全コマンドは150,000学習stepsの
@@ -17,11 +17,9 @@ method 3用の補正枝ファイルは要求しない。
 
 | ファイル | 内容 | 展開ジョブ数 |
 |---|---|---:|
-| `train_propose.json` | 共通のmethod 0をhighway 120台／urban 200台、150,000 stepsで学習 | 6 |
-| `evaluate_propose.json` | method 3の通常評価、15 seed（43〜57） | 12 |
-| `evaluate_propose_analysis.json` | method 3の詳細解析、seed 100・8,000 steps | 12 |
-| `plot.json` | SPS・IPMI・method 0・method 3、履歴長10/20/30の比較 | 4 |
-| `plot_analysis.json` | 同じ比較の詳細解析版、seed 100 | 4 |
+| `train_propose.json` | 共通のmethod 0をhighway 120台／urban 200台、150,000 stepsで学習 | 4 |
+| `evaluate_propose.json` | method 3の通常評価、15 seed（43〜57） | 8 |
+| `evaluate_propose_analysis.json` | method 3の詳細解析、seed 100・8,000 steps | 8 |
 
 JobSchedulerディレクトリで内容確認する：
 
@@ -29,8 +27,8 @@ JobSchedulerディレクトリで内容確認する：
 python3 scheduler.py submit-batch jobs/V2VSimulator-revision/method-3/train_propose.json --dry-run
 python3 scheduler.py submit-batch jobs/V2VSimulator-revision/method-3/evaluate_propose.json --dry-run
 python3 scheduler.py submit-batch jobs/V2VSimulator-revision/method-3/evaluate_propose_analysis.json --dry-run
-python3 scheduler.py submit-batch jobs/V2VSimulator-revision/method-3/plot.json --dry-run
-python3 scheduler.py submit-batch jobs/V2VSimulator-revision/method-3/plot_analysis.json --dry-run
+python3 scheduler.py submit-batch jobs/V2VSimulator-revision/plot.json --dry-run
+python3 scheduler.py submit-batch jobs/V2VSimulator-revision/plot_analysis.json --dry-run
 ```
 
 ジョブを投入するときは対象コマンドから`--dry-run`を外す。
@@ -39,7 +37,7 @@ python3 scheduler.py submit-batch jobs/V2VSimulator-revision/method-3/plot_analy
 initial-0.5・slot 149999のモデルを用意する。
 
 評価と描画は別バッチであり、依存関係は自動登録されない。
-描画は`--step 10 20 30`をまとめて渡し、不足するSPS・IPMI・method 0・
+描画は`--step 20 30`をまとめて渡し、不足するSPS・IPMI・method 0・
 method 3の測定は描画プログラムが自動で実行する。
 重複実行を避けるため、対応する評価が完了してから描画を投入する。
 
@@ -56,3 +54,7 @@ PRR向上はまだ未検証。方式の詳細と制約は対象リポジトリ�
 `IDEAS.md`と`Simulator/COOPERATION.md`を参照する。
 
 ファイル作成・dry-runだけではジョブを登録・実行しない。
+
+描画用JSONは親ディレクトリに集約しています。このディレクトリ内のJSONは学習・評価用です。
+
+共通描画JSONの先頭にある `parameters.methods` に対象の番号を追加してください（例：`[0, 3, 4]`）。コマンドの編集は不要です。

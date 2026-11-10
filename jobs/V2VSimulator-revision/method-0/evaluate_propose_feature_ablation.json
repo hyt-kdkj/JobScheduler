@@ -1,0 +1,47 @@
+{
+  "defaults": {
+    "project": "V2VSimulator-revision"
+  },
+  "jobs": [
+    {
+      "name": "feature_ablation_propose_method0_highway_{step}_{num_vehicles}_{encoder}_{epsilon_profile}",
+      "command": "python3 evaluate_feature_ablation.py --method 0 --agents Propose --scenario highway --step {step} --num-vehicles {num_vehicles} --model highway:120 --analysis-only --encoder {encoder} --epsilon-profile {epsilon_profile}",
+      "matrix": {
+        "step": [
+          20,
+          30
+        ],
+        "num_vehicles": [
+          120,
+          360
+        ],
+        "encoder": [
+          "Transformer"
+        ],
+        "epsilon_profile": [
+          "initial-0.5"
+        ]
+      }
+    },
+    {
+      "name": "feature_ablation_propose_method0_urban_{step}_{num_vehicles}_{encoder}_{epsilon_profile}",
+      "command": "python3 evaluate_feature_ablation.py --method 0 --agents Propose --scenario urban --step {step} --num-vehicles {num_vehicles} --model urban:200 --analysis-only --encoder {encoder} --epsilon-profile {epsilon_profile}",
+      "matrix": {
+        "step": [
+          20,
+          30
+        ],
+        "num_vehicles": [
+          200,
+          500
+        ],
+        "encoder": [
+          "Transformer"
+        ],
+        "epsilon_profile": [
+          "initial-0.5"
+        ]
+      }
+    }
+  ]
+}

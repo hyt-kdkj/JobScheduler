@@ -534,6 +534,40 @@ class SchedulingTest(unittest.TestCase):
         self.assertEqual(jobs[-1]['command'], 'echo ${UNCHANGED} seed=2 vehicles=240')
         self.assertEqual(jobs[-1]['min_free_mib'], 4096)
 
+    def test_batch_parameters_pass_all_methods_without_multiplying_jobs(self):
+        path = Path(self.temp.name) / 'parameters.json'
+        path.write_text(json.dumps(dict(parameters=dict(methods=[0, 3, 4]), jobs=[dict(
+            command='python3 plot.py --method {methods} --vehicles {vehicles} ${UNCHANGED}',
+            matrix=dict(vehicles=[120, 360])), dict(
+            command='python3 plot.py --method {methods} --scenario urban')])))
+        jobs = s.batch_jobs(self.cfg, path)
+        self.assertEqual(len(jobs), 3)
+        self.assertEqual(jobs[0]['command'],
+                         'python3 plot.py --method 0 3 4 --vehicles 120 ${UNCHANGED}')
+        self.assertEqual(jobs[-1]['command'],
+                         'python3 plot.py --method 0 3 4 --scenario urban')
+
+    def test_batch_parameters_quote_each_argument(self):
+        path = Path(self.temp.name) / 'parameters.json'
+        arguments = ['two words', '$(echo unexpected)', '; echo unexpected']
+        path.write_text(json.dumps(dict(parameters=dict(values=arguments), jobs=[dict(
+            command='echo {values}')])))
+        command = s.batch_jobs(self.cfg, path)[0]['command']
+        self.assertEqual(shlex.split(command), ['echo', *arguments])
+
+    def test_invalid_batch_parameters_and_matrix_conflicts(self):
+        path = Path(self.temp.name) / 'parameters.json'
+        for parameters in ([], {'methods': []}, {'methods': [[0, 3]]},
+                           {'methods': [float('inf')]}, {'bad-name': [0]}):
+            with self.subTest(parameters=parameters):
+                path.write_text(json.dumps(dict(parameters=parameters, jobs=[dict(command='echo ok')])))
+                with self.assertRaises(ValueError):
+                    s.batch_jobs(self.cfg, path)
+        path.write_text(json.dumps(dict(parameters=dict(methods=[0, 3]), jobs=[dict(
+            command='echo {methods}', matrix=dict(methods=[4]))])))
+        with self.assertRaisesRegex(ValueError, 'different variable names'):
+            s.batch_jobs(self.cfg, path)
+
     def test_invalid_batch_does_not_register_any_jobs(self):
         path = Path(self.temp.name) / 'invalid.json'
         path.write_text(json.dumps([dict(command='echo valid'), dict(command='')]))

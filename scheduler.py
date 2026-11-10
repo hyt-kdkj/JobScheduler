@@ -551,6 +551,14 @@ def batch_jobs(cfg, path, project=None):
     specs = data.get('jobs') if isinstance(data, dict) else data
     if not isinstance(defaults, dict) or not isinstance(specs, list) or not specs:
         raise ValueError('Batch requires a nonempty jobs list and optional defaults object')
+    parameters = data.get('parameters', {}) if isinstance(data, dict) else {}
+    if not isinstance(parameters, dict) or any(
+            not isinstance(key, str) or not re.fullmatch(r'[A-Za-z_][A-Za-z0-9_]*', key) or
+            not isinstance(values, list) or not values or any(
+                not isinstance(v, (str, int, float, bool)) or
+                (isinstance(v, float) and not math.isfinite(v)) for v in values)
+            for key, values in parameters.items()):
+        raise ValueError('parameters must map variable names to nonempty scalar lists')
     jobs, batch_id = [], uuid.uuid4().hex
     for row in specs:
         if not isinstance(row, dict):
@@ -566,6 +574,8 @@ def batch_jobs(cfg, path, project=None):
                     (isinstance(v, float) and not math.isfinite(v)) for v in values)
                 for key, values in matrix.items()):
             raise ValueError('matrix must map variable names to nonempty scalar lists')
+        if parameters.keys() & matrix.keys():
+            raise ValueError('parameters and matrix must use different variable names')
         count = math.prod(len(values) for values in matrix.values())
         if len(jobs) + count > 10000:
             raise ValueError('A batch may contain at most 10000 jobs')
@@ -574,6 +584,10 @@ def batch_jobs(cfg, path, project=None):
             for field in ('command', 'name'):
                 text = expanded.get(field, '')
                 if isinstance(text, str):
+                    for key, items in parameters.items():
+                        replacement = (shlex.join([str(item) for item in items])
+                                       if field == 'command' else ' '.join(map(str, items)))
+                        text = text.replace('{' + key + '}', replacement)
                     # Preserve unrelated braces used by shell/Python commands.
                     for key, value in zip(matrix, values):
                         text = text.replace('{' + key + '}', str(value))

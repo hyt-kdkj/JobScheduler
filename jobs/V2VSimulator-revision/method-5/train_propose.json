@@ -8,7 +8,6 @@
       "command": "python3 train_propose.py --method 5 --scenario highway --num-vehicles 120 --step {step} --encoder {encoder} --epsilon-profile initial-0.5 --mode safe --option A --xla off",
       "matrix": {
         "step": [
-          10,
           20,
           30
         ],
@@ -22,7 +21,6 @@
       "command": "python3 train_propose.py --method 5 --scenario urban --num-vehicles 200 --step {step} --encoder {encoder} --epsilon-profile initial-0.5 --mode safe --option A --xla off",
       "matrix": {
         "step": [
-          10,
           20,
           30
         ],
