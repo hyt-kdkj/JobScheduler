@@ -13,12 +13,15 @@
 | [method-2](method-2/README.md) | 共通method 0の学習・100 ms以内の上位4候補予告の通常評価・詳細解析 |
 | [method-3](method-3/README.md) | 共通method 0の基底モデル学習・method 3の通常評価・詳細解析 |
 | [method-4](method-4/README.md) | 共通method 0の基底モデル学習・method 4の通常評価・詳細解析 |
-| [method-5](method-5/README.md) | method 5の学習・通常評価・詳細解析 |
+| [method-5](method-5/README.md) | 最近傍1台・上位2候補予告の通常評価・詳細解析、共通method 0の学習 |
+| [method-6](method-6/README.md) | 最近傍1台・上位4候補予告の通常評価・詳細解析、共通method 0の学習 |
 
 履歴長は20・30、初期εは0.5です。学習はhighway 120台／urban 200台、評価・描画はhighway 120・360台／urban 200・500台です。
-モデルの評価上限は150,000学習steps（slot 149999）。method 1〜4はmethod 0の固定モデルを使うため追加学習は不要です。
-method-0/1/2/3/4のtrainは同じ基底モデルを学習するので、必要な場合に一つだけ使います。
-method 1/2は100 ms以内の一段階予告、method 3/4は120〜200 ms先の二段階抽選結合です。旧method 1/2の協調枝モデル・キャッシュは使いません。
+モデルの評価上限は150,000学習steps（slot 149999）。method 1〜6はmethod 0の固定モデルを使うため追加学習は不要です。
+method-0〜6のtrainは同じ基底モデルを学習するので、必要な場合に一つだけ使います。
+method 1/2は100 ms以内の短期予告、method 3/4は再選択前の最後のCAMで予告し、RC=0で全近傍を使って最新Qの選択確率を補正します。
+method 5/6も最後のCAMで予告し、RC=0で条件を満たす最近傍1台だけを参照して抽選確率を減らします。通知候補数はそれぞれ2・4です。
+旧method 5の協調RLモデルは使いません。旧method 1/2の協調枝モデル・キャッシュも使いません。
 各構成・ジョブ数・前提条件はモデルごとのREADMEを参照してください。
 
 ## 共通baseline評価
@@ -42,7 +45,7 @@ python3 scheduler.py submit-batch jobs/V2VSimulator-revision/evaluate_baseline_a
 | `plot.json` | 通常評価の比較描画 |
 | `plot_analysis.json` | `--analysis-only` の比較描画 |
 
-比較対象は各JSONの先頭にある `parameters.methods` のリストだけで指定します。初期値は `[0]` です。
+比較対象は各JSONの先頭にある `parameters.methods` のリストだけで指定します。現在、通常描画は `[0]`、詳細解析の描画は `[0, 3, 4]` です。
 例えば次のように変更すると、highway・urbanの全ジョブでmethod 0・3・4をまとめて比較します。コマンドの編集は不要です。
 
 ```json
@@ -61,6 +64,8 @@ method 0は既存Proposeで、省略時の既定値でもあります。保存�
 # JobScheduler/で実行。--dry-runは登録・SSH接続なしの確認
 python3 scheduler.py submit-batch jobs/V2VSimulator-revision/method-0/train_propose.json --dry-run
 python3 scheduler.py submit-batch jobs/V2VSimulator-revision/method-3/evaluate_propose.json --dry-run
+python3 scheduler.py submit-batch jobs/V2VSimulator-revision/method-5/evaluate_propose_analysis.json --dry-run
+python3 scheduler.py submit-batch jobs/V2VSimulator-revision/method-6/evaluate_propose_analysis.json --dry-run
 python3 scheduler.py submit-batch jobs/V2VSimulator-revision/plot.json --dry-run
 python3 scheduler.py submit-batch jobs/V2VSimulator-revision/plot_analysis.json --dry-run
 ```
