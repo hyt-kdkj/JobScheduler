@@ -131,7 +131,10 @@ def shared_record(path):
 
 
 def shared_sync(jobs):
-    with shared_lock() as directory:
+    # Records are published by atomic rename. A read-only status snapshot need
+    # not wait behind a launch holding the SAN queue lock during GPU probing.
+    context = shared_lock() if jobs else contextlib.nullcontext(root_dir().parent / 'shared')
+    with context as directory:
         allowed = {'id', 'command', 'name', 'created', 'status', 'requested_host',
                    'min_free_mib', 'batch_id', 'batch_file', 'project', 'execution'}
         for job in jobs:
@@ -141,7 +144,13 @@ def shared_sync(jobs):
                 if job['status'] != 'queued':
                     raise ValueError('Only queued jobs can be published')
                 save(path, {k: v for k, v in job.items() if k in allowed})
-        return {'jobs': [shared_record(p) for p in sorted(directory.glob('*.json'))]}
+        records = []
+        for path in sorted(directory.glob('*.json')):
+            try:
+                records.append(shared_record(path))
+            except FileNotFoundError:
+                continue  # An administrator may have archived a record.
+        return {'jobs': records}
 
 
 def shared_cancel(job_id):
@@ -782,10 +791,17 @@ def worker(job_id):
 
 def main(req):
     root_dir().mkdir(parents=True, exist_ok=True, mode=0o700)
-    # All copies of this tool using the same SSH account coordinate here.
-    with (root_dir() / 'dispatch.lock').open('a') as lock:
-        fcntl.flock(lock, fcntl.LOCK_EX)
-        action = req['action']
+    action = req['action']
+    read_only = (action in ('status', 'logs', 'logs_batch') or
+                 (action == 'shared_sync' and not req.get('jobs')) or
+                 (action == 'status_batch' and all(
+                     item.get('action') == 'status' for item in req.get('requests', []))))
+    # Keep mutations serialized; reading atomically saved records does not
+    # require the GPU/container lifecycle lock. Cancellation batches still do.
+    context = contextlib.nullcontext() if read_only else (root_dir() / 'dispatch.lock').open('a')
+    with context as lock:
+        if lock is not None:
+            fcntl.flock(lock, fcntl.LOCK_EX)
         if action == 'probe':
             return probe(req)
         if action == 'stop_idle_template':

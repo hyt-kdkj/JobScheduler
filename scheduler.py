@@ -36,10 +36,11 @@ def configure_ssh(cfg, state_dir):
 
 
 @contextmanager
-def ssh_connection_slot(host):
+def ssh_connection_slot(host, timeout=None):
     """Bound SSH connections across threads and commands sharing a state dir."""
     SSH_LOCK_DIRECTORY.mkdir(parents=True, exist_ok=True, mode=0o700)
     name = hashlib.sha256(host.encode()).hexdigest()
+    deadline = None if timeout is None else time.monotonic() + timeout
     with ExitStack() as stack:
         slots = [stack.enter_context((SSH_LOCK_DIRECTORY / f'{name}.{i}.lock').open('a'))
                  for i in range(SSH_CONNECTION_LIMITS.get(host, 1))]
@@ -54,10 +55,23 @@ def ssh_connection_slot(host):
                 finally:
                     fcntl.flock(slot, fcntl.LOCK_UN)
                 return
+            if deadline is not None and time.monotonic() >= deadline:
+                raise RuntimeError(f'{host}: SSH connection busy; waited {timeout:g}s')
             time.sleep(0.05)
 
 
+def read_only_request(request):
+    action = request.get('action')
+    return (action in ('status', 'logs', 'logs_batch') or
+            (action == 'shared_sync' and not request.get('jobs')) or
+            (action == 'status_batch' and all(
+                item.get('action') == 'status' for item in request.get('requests', []))))
+
+
 def remote(host, request):
+    read_only = read_only_request(request)
+    timeout = (15 if read_only else
+               1900 if request.get('action') in ('probe', 'launch') else 100)
     source = (HERE / 'remote.py').read_text()
     program = 'SOURCE_CODE = ' + repr(source) + '\n' + source
     encoded = base64.b64encode(program.encode()).decode()
@@ -67,11 +81,13 @@ def remote(host, request):
            '-o', 'ServerAliveInterval=10', '-o', 'ServerAliveCountMax=2', host,
            shlex.join(['python3', '-c', loader])]
     try:
-        with ssh_connection_slot(host):
+        with ssh_connection_slot(host, timeout=2 if read_only else None):
             result = subprocess.run(cmd, input=json.dumps(request), text=True,
                                     stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                                    timeout=1900 if request.get('action') in ('probe', 'launch') else 100)
-    except (OSError, subprocess.TimeoutExpired) as exc:
+                                    timeout=timeout)
+    except subprocess.TimeoutExpired as exc:
+        raise RuntimeError(f'{host}: {request.get("action")} timed out after {timeout}s') from exc
+    except OSError as exc:
         raise RuntimeError(str(exc)) from exc
     if result.returncode:
         raise RuntimeError(result.stderr.strip() or f'SSH exit {result.returncode}')
@@ -795,7 +811,10 @@ def main():
             dispatch_once(cfg, queue)
         elif not args.local:
             # Status never starts a job unless --dispatch is explicit.
-            refresh_shared(cfg, queue)
+            try:
+                refresh_shared(cfg, queue)
+            except RuntimeError as exc:
+                print(f'Shared queue unavailable; using cached jobs: {exc}', file=sys.stderr)
             refresh_status(queue)
             sync_completed(cfg, queue)
         jobs = status_jobs(queue.all(), include_all=args.all)

@@ -151,6 +151,25 @@ with s.ssh_connection_slot(sys.argv[2]):
             with self.assertRaisesRegex(ValueError, 'max_ssh_connections'):
                 s.configuration(path)
 
+    def test_status_does_not_wait_indefinitely_for_busy_connection(self):
+        with s.ssh_connection_slot('a'), patch.object(s.subprocess, 'run') as run:
+            started = time.monotonic()
+            with self.assertRaisesRegex(RuntimeError, 'SSH connection busy'):
+                s.remote('a', {'action': 'status', 'id': 'job'})
+            self.assertLess(time.monotonic() - started, 3)
+        run.assert_not_called()
+
+    def test_timeout_message_does_not_include_encoded_remote_program(self):
+        with patch.object(s.subprocess, 'run', side_effect=subprocess.TimeoutExpired(
+                ['ssh', 'long encoded helper'], 15)):
+            with self.assertRaisesRegex(RuntimeError, '^a: logs timed out after 15s$'):
+                s.remote('a', {'action': 'logs', 'id': 'job'})
+
+    def test_cancellation_batch_is_not_classified_as_read_only(self):
+        self.assertFalse(s.read_only_request({'action': 'status_batch', 'requests':[
+            {'action': 'status'}, {'action': 'cancel'}]}))
+        self.assertFalse(s.read_only_request({'action': 'shared_sync', 'jobs': [{'id': 'x'}]}))
+
 
 class SchedulingTest(unittest.TestCase):
     def setUp(self):
@@ -329,6 +348,18 @@ class SchedulingTest(unittest.TestCase):
         for job in jobs[1:]:
             self.assertEqual(self.q.get(job['id'])['status'], 'succeeded')
 
+    def test_status_shows_cached_jobs_when_shared_queue_is_unavailable(self):
+        job = self.job()
+        with patch.object(sys, 'argv', ['scheduler.py', '--state-dir', self.temp.name, 'status']), \
+             patch.object(s, 'refresh_shared', side_effect=RuntimeError('offline')), \
+             patch.object(s, 'remote') as remote, \
+             contextlib.redirect_stdout(io.StringIO()) as output, \
+             contextlib.redirect_stderr(io.StringIO()) as errors:
+            self.assertEqual(s.main(), 0)
+        self.assertIn(job['id'][:8], output.getvalue())
+        self.assertIn('using cached jobs', errors.getvalue())
+        remote.assert_not_called()
+
     def test_status_batch_errors_and_missing_do_not_damage_other_jobs(self):
         jobs = [self.job() for _ in range(3)]
         for job in jobs:
@@ -402,7 +433,7 @@ class SchedulingTest(unittest.TestCase):
             s.remote('a', {'action': 'probe'})
             self.assertEqual(call.call_args.kwargs['timeout'], 1900)
             s.remote('a', {'action': 'status'})
-            self.assertEqual(call.call_args.kwargs['timeout'], 100)
+            self.assertEqual(call.call_args.kwargs['timeout'], 15)
 
     def test_template_inspection_error_does_not_trigger_creation(self):
         import remote as r
@@ -919,6 +950,34 @@ class MonitorRecoveryTest(unittest.TestCase):
         r.save(self.directory / 'request.json', self.data)
         self.info = dict(State=dict(Running=True), Config=dict(Labels={
             'job-scheduler.id': self.job_id}))
+
+    def test_read_only_rpc_does_not_acquire_dispatch_lock(self):
+        requests = [{'action': 'status', 'id': self.job_id},
+                    {'action': 'status_batch', 'requests': [{'action': 'status', 'id': self.job_id}]},
+                    {'action': 'logs', 'id': self.job_id},
+                    {'action': 'logs_batch', 'ids': [self.job_id]}]
+        for request in requests:
+            with self.subTest(request=request), \
+                 patch.object(self.r.fcntl, 'flock', side_effect=AssertionError('unexpected dispatch lock')), \
+                 patch.object(self.r, 'read_job', return_value=self.data), \
+                 patch.object(self.r, 'read_log', return_value='log'):
+                self.r.main(request)
+
+    def test_empty_shared_sync_reads_atomic_records_without_queue_lock(self):
+        root = Path(self.temp.name) / 'host'
+        shared = root.parent / 'shared'
+        shared.mkdir()
+        job = dict(id=self.job_id, created=123, status='queued')
+        self.r.save(shared / (self.job_id + '.json'), job)
+        with patch.object(self.r, 'root_dir', return_value=root), \
+             patch.object(self.r.fcntl, 'flock', side_effect=AssertionError('unexpected lock')):
+            self.assertEqual(self.r.main({'action': 'shared_sync', 'jobs': []}), {'jobs': [job]})
+
+    def test_cancel_batch_keeps_dispatch_lock(self):
+        with patch.object(self.r.fcntl, 'flock') as lock, \
+             patch.object(self.r, 'cancel', return_value={'status': 'cancelling'}):
+            self.r.main({'action': 'status_batch', 'requests': [{'action': 'cancel', 'id': self.job_id}]})
+        lock.assert_called_once()
 
     def test_legacy_worker_cleanup_is_redirected_without_changing_running_command(self):
         req = dict(self.data, container='manual-template', command='training command')
