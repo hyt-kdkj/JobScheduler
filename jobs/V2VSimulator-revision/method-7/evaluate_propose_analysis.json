@@ -1,0 +1,41 @@
+{
+  "defaults": {
+    "project": "V2VSimulator-revision"
+  },
+  "jobs": [
+    {
+      "name": "eval_propose_method7_highway_{step}_{num_vehicles}_analysis_{encoder}_initial-0.5",
+      "command": "python3 evaluate_methods.py --agents Propose --method 7 --scenario highway --step {step} --num-vehicles {num_vehicles} --encoder {encoder} --epsilon-profile initial-0.5 --mode safe --option A --xla off --model highway:120 --load-slot 149999 --analysis-only --analysis-seed 100",
+      "matrix": {
+        "step": [
+          20,
+          30
+        ],
+        "num_vehicles": [
+          120,
+          360
+        ],
+        "encoder": [
+          "Transformer"
+        ]
+      }
+    },
+    {
+      "name": "eval_propose_method7_urban_{step}_{num_vehicles}_analysis_{encoder}_initial-0.5",
+      "command": "python3 evaluate_methods.py --agents Propose --method 7 --scenario urban --step {step} --num-vehicles {num_vehicles} --encoder {encoder} --epsilon-profile initial-0.5 --mode safe --option A --xla off --model urban:200 --load-slot 149999 --analysis-only --analysis-seed 100",
+      "matrix": {
+        "step": [
+          20,
+          30
+        ],
+        "num_vehicles": [
+          200,
+          500
+        ],
+        "encoder": [
+          "Transformer"
+        ]
+      }
+    }
+  ]
+}
