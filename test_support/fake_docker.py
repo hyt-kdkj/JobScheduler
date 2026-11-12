@@ -50,6 +50,13 @@ def main():
         print(json.dumps([info]))
         return 0
     if action == 'top':
+        if args[0] in ('test', 'test-worktree3'):
+            if args[-1] != 'pid,args':
+                print("Couldn't find PID field in ps output", file=sys.stderr)
+                return 1
+            print('PID COMMAND')
+            print('1 sleep infinity')
+            return 0
         path = containers / args[0]
         if not path.exists():
             print('error: no such container', file=sys.stderr)

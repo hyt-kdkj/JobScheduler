@@ -736,6 +736,8 @@ class SchedulingTest(unittest.TestCase):
         for i, state in enumerate(states):
             job = self.job()
             job.update(status=state, created=i)
+            if state in s.TERMINAL:
+                job['finished'] = time.time()
             self.q.put(job)
             jobs.append(job)
         for extra, expected in (([], [4, 2, 0, 5]),
@@ -946,20 +948,53 @@ class MonitorRecoveryTest(unittest.TestCase):
             inspect.assert_not_called()
         self.assertEqual(json.loads((self.directory / 'request.json').read_text()), req)
 
-    def test_probe_leaves_started_template_running_even_on_inspection_failure(self):
+    def test_probe_stops_idle_template_even_on_inspection_failure(self):
         for error in (False, True):
             with contextlib.ExitStack() as stack:
                 stack.enter_context(patch.object(self.r, 'template_lock', contextlib.nullcontext))
                 stack.enter_context(patch.object(self.r, 'ensure_template', return_value=False))
                 probe = stack.enter_context(patch.object(self.r, 'probe_running', return_value={'gpus': []}))
-                run = stack.enter_context(patch.object(self.r, 'run'))
+                cleanup = stack.enter_context(patch.object(self.r, 'stop_idle_template_locked'))
                 if error:
                     probe.side_effect = RuntimeError('GPU inspection failed')
                     with self.assertRaisesRegex(RuntimeError, 'GPU inspection failed'):
                         self.r.probe({})
                 else:
                     self.assertEqual(self.r.probe({}), {'gpus': []})
-                run.assert_not_called()
+                cleanup.assert_called_once_with({})
+
+    def test_idle_template_is_stopped_but_manual_work_is_preserved(self):
+        for commands, should_stop in [('COMMAND\nsleep infinity\n', True),
+                                      ('COMMAND\ndocker-init -- sleep infinity\nsleep infinity\n', True),
+                                      ('COMMAND\nsleep infinity\npython3 evaluate_methods.py\n', False),
+                                      ('COMMAND\nsleep infinity\nbash -i\n', True),
+                                      ('COMMAND\nsleep infinity\nbash simulation.sh\n', False),
+                                      ('COMMAND\n', False)]:
+            with self.subTest(commands=commands), \
+                 patch.object(self.r, 'template_running', return_value=True), \
+                 patch.object(self.r, 'run', return_value=subprocess.CompletedProcess(
+                     [], 0, 'PID COMMAND\n' + ''.join(
+                         f'{i} {command}\n' for i, command in enumerate(commands.splitlines()[1:], 1)), '')) as run:
+                result = self.r.stop_idle_template_locked({'container': 'test'})
+            self.assertEqual(result['status'], 'stopped' if should_stop else 'busy')
+            self.assertEqual(any(call.args[0][1] == 'stop' for call in run.call_args_list), should_stop)
+
+    def test_template_process_inspection_failure_never_stops_it(self):
+        with patch.object(self.r, 'template_running', return_value=True), \
+             patch.object(self.r, 'run', return_value=subprocess.CompletedProcess(
+                 [], 1, '', 'permission denied')) as run:
+            with self.assertRaisesRegex(RuntimeError, 'Cannot check template processes'):
+                self.r.stop_idle_template_locked({'container': 'test'})
+        self.assertEqual(run.call_count, 1)
+
+    def test_job_preparation_failure_still_stops_idle_template(self):
+        with patch.object(self.r, 'template_lock', contextlib.nullcontext), \
+             patch.object(self.r, 'template_running', return_value=False), \
+             patch.object(self.r, 'job_command_locked', side_effect=RuntimeError('snapshot failed')), \
+             patch.object(self.r, 'stop_idle_template_locked') as cleanup:
+            with self.assertRaisesRegex(RuntimeError, 'snapshot failed'):
+                self.r.job_command({'container': 'test'})
+        cleanup.assert_called_once_with({'container': 'test'})
 
     def test_missing_tmux_falls_back_to_owned_running_container(self):
         for state in ('running', 'unknown'):
@@ -1096,7 +1131,7 @@ class DetachedLifecycleTest(unittest.TestCase):
                                       ('job-scheduler-' + self.req['id'])).exists())
                     template_marker = ('worktree3-template-stopped'
                                        if self.req['container'] == 'test-worktree3' else 'template-stopped')
-                    self.assertFalse((self.root / 'docker-state' / template_marker).exists())
+                    self.assertTrue((self.root / 'docker-state' / template_marker).exists())
                 return data
             time.sleep(0.05)
         self.fail('Detached worker did not finish: ' + repr(data))
@@ -1350,11 +1385,11 @@ else:
         state.mkdir()
         (state / 'template-stopped').touch()
         self.assertEqual(len(self.ns['main'](dict(self.req, action='probe'))['gpus']), 2)
-        self.assertFalse((state / 'template-stopped').exists())
+        self.assertTrue((state / 'template-stopped').exists())
         self.ns['main'](self.req)
         self.assertEqual(self.wait_result()['status'], 'succeeded')
         self.assertEqual(len(self.ns['main'](dict(self.req, action='probe'))['gpus']), 2)
-        self.assertFalse((self.root / 'docker-state/template-stopped').exists())
+        self.assertTrue((self.root / 'docker-state/template-stopped').exists())
         self.req = dict(self.req, id=uuid.uuid4().hex)
         self.assertEqual(self.ns['main'](self.req)['status'], 'reserved')
         self.assertEqual(self.wait_result()['status'], 'succeeded')
@@ -1378,21 +1413,34 @@ else:
         self.req = dict(self.req, id=uuid.uuid4().hex)
         self.assertEqual(self.ns['main'](self.req)['status'], 'reserved')
         self.assertEqual(self.wait_result()['status'], 'succeeded')
-        self.assertEqual((state / 'template-starts').read_text(), 'started')
+        self.assertEqual((state / 'template-starts').read_text(), 'startedstarted')
 
-    def test_job_completion_preserves_template_for_manual_use(self):
+    def test_job_completion_stops_idle_template_and_preserves_exit_result(self):
         directory = self.root / 'finish-test'
         directory.mkdir()
         (directory / 'request.json').write_text(json.dumps(dict(self.req, job_container='owned')))
         for status, code in (('succeeded', 0), ('failed', 7), ('cancelled', 143)):
             data = dict(status=status, exit_code=code, window_id='@123')
             with patch.dict(self.ns, tmux=lambda args: None), \
-                 patch.object(subprocess, 'run') as run:
+                 patch.dict(self.ns, stop_idle_template=lambda req: None):
                 self.ns['finish_job'](directory, data)
-            run.assert_not_called()
             saved = json.loads((directory / 'status.json').read_text())
             self.assertEqual(saved['status'], status)
             self.assertEqual(saved['exit_code'], code)
+
+    def test_template_stop_failure_does_not_change_job_exit_result(self):
+        directory = self.root / 'finish-test'
+        directory.mkdir()
+        (directory / 'request.json').write_text(json.dumps(dict(self.req, job_container='owned')))
+        data = dict(status='succeeded', exit_code=0, window_id='@123')
+        def fail(req):
+            raise RuntimeError('template stop failed')
+        with patch.dict(self.ns, stop_idle_template=fail, tmux=lambda args: None):
+            self.ns['finish_job'](directory, data)
+        saved = json.loads((directory / 'status.json').read_text())
+        self.assertEqual(saved['status'], 'succeeded')
+        self.assertEqual(saved['exit_code'], 0)
+        self.assertEqual(saved['template_cleanup_error'], 'template stop failed')
 
     def test_san_queue_claim_prevents_two_pcs_dispatching_same_job(self):
         job = dict(id=self.req['id'], created=time.time(), status='queued',

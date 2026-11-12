@@ -258,12 +258,50 @@ def ensure_template(req):
     return bool(was_running)
 
 
-def probe(req):
-    # The template also hosts manual shells and commands. Leave it running
-    # after inspection so another user's session cannot be interrupted.
+def stop_idle_template_locked(req):
+    """Stop the environment source, preserving any manual commands inside it."""
+    running = template_running(req)
+    result = dict(container=req['container'], status='absent' if running is None else 'already_stopped')
+    if not running:
+        return result
+    processes = run(['docker', 'top', req['container'], '-eo', 'pid,args'])
+    if processes.returncode:
+        raise RuntimeError('Cannot check template processes: ' + processes.stderr.strip())
+    commands = []
+    for line in processes.stdout.splitlines()[1:]:
+        if not line.strip():
+            continue
+        columns = line.split(None, 1)
+        if len(columns) != 2 or not columns[0].isdigit():
+            raise RuntimeError('Cannot parse template process list')
+        commands.append(columns[1].strip())
+    # Idle interactive shells may be closed along with the template. Commands
+    # launched from them (including shell scripts) keep it running.
+    idle = {'sleep infinity', '/bin/sleep infinity', '/usr/bin/sleep infinity',
+            'bash', 'bash -i', '/bin/bash', '/bin/bash -i',
+            '/usr/bin/bash', '/usr/bin/bash -i', 'sh', '/bin/sh'}
+    def inactive(command):
+        return command in idle or bool(re.match(r'^(?:\S*/)?(?:docker-init|tini)(?:\s|$)', command))
+    if not commands or any(not inactive(command) for command in commands):
+        return dict(result, status='busy', processes=commands)
+    stopped = run(['docker', 'stop', '--time', '10', req['container']])
+    if stopped.returncode:
+        raise RuntimeError('Cannot stop template container: ' + stopped.stderr.strip())
+    return dict(result, status='stopped')
+
+
+def stop_idle_template(req):
     with template_lock():
-        ensure_template(req)
-        return probe_running(req)
+        return stop_idle_template_locked(req)
+
+
+def probe(req):
+    with template_lock():
+        try:
+            ensure_template(req)
+            return probe_running(req)
+        finally:
+            stop_idle_template_locked(req)
 
 
 def probe_running(req):
@@ -353,9 +391,12 @@ def runtime_image(req, template):
 
 def job_command(req):
     with template_lock():
-        if template_running(req) is None:
-            ensure_template(req)
-        return job_command_locked(req)
+        try:
+            if template_running(req) is None:
+                ensure_template(req)
+            return job_command_locked(req)
+        finally:
+            stop_idle_template_locked(req)
 
 
 def job_command_locked(req):
@@ -665,8 +706,13 @@ def watch_cancel(req, directory, stopped):
 
 
 def finish_job(directory, data):
-    # Only the job's own container is cleaned up by its worker. The shared
-    # template may contain a manual evaluation and must never be stopped here.
+    if data['status'] in ('succeeded', 'failed', 'cancelled'):
+        try:
+            req = json.loads((directory / 'request.json').read_text())
+            if req.get('job_container'):
+                stop_idle_template(req)
+        except Exception as exc:
+            data['template_cleanup_error'] = str(exc)
     # Persist the result first: killing our own tmux session can terminate us.
     save(directory / 'status.json', data)
     if data['status'] in ('succeeded', 'failed', 'cancelled'):
@@ -742,6 +788,8 @@ def main(req):
         action = req['action']
         if action == 'probe':
             return probe(req)
+        if action == 'stop_idle_template':
+            return stop_idle_template(req)
         if action == 'protect_templates':
             return protect_templates()
         if action == 'shared_sync':
