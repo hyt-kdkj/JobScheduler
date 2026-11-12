@@ -12,6 +12,7 @@ EncoderはTransformer、履歴長は20・30、学習シナリオはhighway 120�
 | `evaluate_propose.json` | 8 |
 | `evaluate_propose_analysis.json` | 8 |
 | `evaluate_propose_feature_ablation.json` | 8 |
+| `../measure_method0_qv_highway.json` | 2（Highway 120台・360台、履歴長20、Q・V測定） |
 
 `JobScheduler/`で実行します。評価・描画は対応モデルの学習完了後に実行してください。
 

@@ -1,0 +1,17 @@
+{
+  "defaults": {
+    "project": "V2VSimulator-revision"
+  },
+  "jobs": [
+    {
+      "name": "measure_qv_method0_highway_{num_vehicles}_step20_Transformer_initial-0.5_seed100",
+      "command": "python3 evaluate_methods.py --agents Propose --method 0 --measure-qv --scenario highway --num-vehicles {num_vehicles} --step 20 --encoder Transformer --epsilon-profile initial-0.5 --mode safe --option A --xla off --model highway:120 --load-slot 149999 --analysis-only --analysis-seed 100",
+      "matrix": {
+        "num_vehicles": [
+          120,
+          360
+        ]
+      }
+    }
+  ]
+}

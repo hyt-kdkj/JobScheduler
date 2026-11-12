@@ -27,6 +27,20 @@ method 7/8は有効な予告入りCAMの送信元から最近傍3台を先に選
 旧method 5の協調RLモデルは使いません。旧method 1/2の協調枝モデル・キャッシュも使いません。
 各構成・ジョブ数・前提条件はモデルごとのREADMEを参照してください。
 
+## method 0のQ・V測定
+
+`measure_method0_qv_highway.json`はHighway 120台・360台だけの2ジョブです。
+両方ともHighway 120台で学習したmethod 0の同じモデル（履歴長20、Transformer、initial-0.5、slot149999）を使用します。
+seed100、warmup40秒＋評価160秒で、実際のRC=0のQとDueling Vを`--measure-qv`で記録します。追加学習は不要です。
+
+```bash
+python3 scheduler.py submit-batch jobs/V2VSimulator-revision/measure_method0_qv_highway.json --dry-run
+# 投入するときは --dry-run を外す
+```
+
+出力・読み方は対象プロジェクトの`markdown/Method0_QV_Measurement.md`を参照してください。
+ファイル作成とdry-runだけではジョブは登録・実行されません。実行前に対応ソースをサーバーへ配置してください。
+
 ## 共通baseline評価
 
 SPS・IPMIの評価はEncoder・εに依存しないため共有します。各4ジョブです。
