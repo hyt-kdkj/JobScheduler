@@ -4,8 +4,8 @@
   },
   "jobs": [
     {
-      "name": "eval_propose_method2_highway_{step}_{num_vehicles}_{encoder}_initial-0.5",
-      "command": "python3 evaluate_methods.py --agents Propose --method 2 --scenario highway --step {step} --num-vehicles {num_vehicles} --encoder {encoder} --epsilon-profile initial-0.5 --mode safe --option A --xla off --model highway:120 --load-slot 149999",
+      "name": "eval_propose_method2_sps10_tv10_highway_{step}_{num_vehicles}_{encoder}_initial-0.5",
+      "command": "python3 evaluate_methods.py --agents Propose --method 2 --scenario highway --step {step} --num-vehicles {num_vehicles} --encoder {encoder} --epsilon-profile initial-0.5 --mode safe --option A --xla off --model highway:120 --load-slot 149999 --evaluation-epsilon 0",
       "matrix": {
         "step": [
           20,
@@ -21,8 +21,8 @@
       }
     },
     {
-      "name": "eval_propose_method2_urban_{step}_{num_vehicles}_{encoder}_initial-0.5",
-      "command": "python3 evaluate_methods.py --agents Propose --method 2 --scenario urban --step {step} --num-vehicles {num_vehicles} --encoder {encoder} --epsilon-profile initial-0.5 --mode safe --option A --xla off --model urban:200 --load-slot 149999",
+      "name": "eval_propose_method2_sps10_tv10_urban_{step}_{num_vehicles}_{encoder}_initial-0.5",
+      "command": "python3 evaluate_methods.py --agents Propose --method 2 --scenario urban --step {step} --num-vehicles {num_vehicles} --encoder {encoder} --epsilon-profile initial-0.5 --mode safe --option A --xla off --model urban:200 --load-slot 149999 --evaluation-epsilon 0",
       "matrix": {
         "step": [
           20,

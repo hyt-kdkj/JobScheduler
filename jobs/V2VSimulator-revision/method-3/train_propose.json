@@ -4,7 +4,7 @@
   },
   "jobs": [
     {
-      "name": "train_base_method0_for_method3_highway_{step}_{encoder}_initial-0.5",
+      "name": "train_base_method0_sps20_for_method3_highway_{step}_{encoder}_initial-0.5",
       "command": "python3 train_propose.py --method 0 --scenario highway --num-vehicles 120 --step {step} --encoder {encoder} --epsilon-profile initial-0.5 --mode safe --option A --xla off",
       "matrix": {
         "step": [
@@ -17,7 +17,7 @@
       }
     },
     {
-      "name": "train_base_method0_for_method3_urban_{step}_{encoder}_initial-0.5",
+      "name": "train_base_method0_sps20_for_method3_urban_{step}_{encoder}_initial-0.5",
       "command": "python3 train_propose.py --method 0 --scenario urban --num-vehicles 200 --step {step} --encoder {encoder} --epsilon-profile initial-0.5 --mode safe --option A --xla off",
       "matrix": {
         "step": [

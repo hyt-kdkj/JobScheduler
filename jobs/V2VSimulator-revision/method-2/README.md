@@ -1,30 +1,46 @@
-# method 2：100 ms以内の上位4候補予告
+# method 2：SPS候補10%・method 9の確率移動（上限10ポイント）
 
-通常Basic CAMで、実送信時刻から100 ms以内（上端を含む）の再選択予定・候補・確率を予告します。
-受信車は自分の通常再選択時に最新Qの分布を小幅に補正します。相手の指名・結果通知は不要です。
-method 3/4の二段階抽選結合とは異なります。初期ε0.5・Transformer・履歴長20/30、
-highway 120台／urban 200台のmethod 0のslot149999を、各2密度で評価します。
+method 9と同じ予告・確率補正を使い、評価時のSPS候補だけを20%から10%へ変更する。最後の通常Basic CAMで上位4候補と元の確率を予告し、自分のRC=0で最新Qを再計算する。有効な予告を持つ最近傍3台のBasic・Extra両flowを参照し、追加重なりの上下限とQ予算を使って確率を移す。
 
-旧method 2の協調枝を学習する方式は置き換えました。旧モデル・キャッシュは使いません。
-**追加学習は不要です。** `train_propose.json`は共通のmethod 0の基底モデルを学習します。
-method-0/1/2/3/4のtrainは同じ保存先を使うため、必要な場合に一つだけ投入します。
+移動量は最大10ポイントで、毎回この量を動かすわけではない。平均Q低下の上限0.25や予告の不確かさが先に制限となり、補正を見送る場合もある。決定資源の事前通知・応答・ユニキャストは追加しない。
+
+「候補10%」はQの上位10%ではなく、SPSと同じ予約RSRP除外後に平均S-RSSIが小さい資源から選ぶ割合。現在資源が候補外でも、method 0と同じく抽選対象へ追加する。
+
+**学習時は20%のまま。method 0の既存モデルを使うため追加学習は不要。**
+train_propose.jsonは不足している共通method 0のモデルを学習する補助バッチで、明示的に --method 0 を使う。全methodのtrainは同じ保存先を使うため、モデルが既にある場合は評価だけを実行する。
+
+## 実行条件
+
+- 履歴長20・30、Transformer、initial-0.5、mode=safe、option=A、XLA=off、評価epsilon=0。
+- Highwayは120台で学習したmethod 0を120・360台で評価する。
+- Urbanは200台で学習したmethod 0を200・500台で評価する。
+- 同じ履歴長・Encoder・学習条件のslot 149999を固定して読み込む。
+- サーバーの選択・除外GPU・同時実行上限は既存設定を使う。
 
 | ファイル | 内容 | 展開ジョブ数 |
 |---|---|---:|
-| `train_propose.json` | method 0の共通基底モデル学習 | 4 |
-| `evaluate_propose.json` | 通常評価、15 seed（43〜57） | 8 |
-| `evaluate_propose_analysis.json` | 詳細解析、seed100・8,000 steps | 8 |
+| train_propose.json | 候補20%で共通method 0を学習。既存モデルがあれば不要 | 4 |
+| evaluate_propose.json | method 2の通常評価、15 seed（43〜57）・各5,000 steps | 8 |
+| evaluate_propose_analysis.json | method 2の詳細解析、seed100・8,000 steps | 8 |
+
+ジョブ名にはsps10_tv10を含め、新しい方式であることを区別する。学習ジョブ名はsps20を含む。
+
+## 内容確認と投入
+
+JobSchedulerディレクトリで実行する。
 
 ```bash
-# JobScheduler/で実行。登録・SSH接続なしの展開確認
 python3 scheduler.py submit-batch jobs/V2VSimulator-revision/method-2/evaluate_propose.json --dry-run
 python3 scheduler.py submit-batch jobs/V2VSimulator-revision/method-2/evaluate_propose_analysis.json --dry-run
+# method 0のモデルが未学習の場合のみ
+python3 scheduler.py submit-batch jobs/V2VSimulator-revision/method-2/train_propose.json --dry-run
 ```
 
-学習済み基底モデルがあれば、対応する評価だけを投入してください。実際の投入時は`--dry-run`を外します。
-ファイル変更だけでは登録済み・実行中のジョブを変更しません。旧協調枝の存在確認コマンドは削除しました。
+投入時は対象コマンドから --dry-run を外す。学習・評価・描画の依存関係は自動登録されない。
+**サーバー側にも新しいmethod 1・2・3のソースを配置してから使う。** ソースは自動転送されない。
+旧method 1・2の短期予告、旧method 3の抽選結合・指数補正とは別方式で、旧測定キャッシュは新方式の結果として流用しない。
 
-描画用JSONは親ディレクトリの `plot.json`／`plot_analysis.json` です。
-`parameters.methods` に対象番号を追加してください（例：`[0, 1, 2, 3, 4]`）。
-先に基底モデルの学習・評価を完了してください。描画時は不足する測定を自動実行します。
-仕様・制約はシミュレータの `Simulator/ShortPreview.md` を参照してください。
+描画は親ディレクトリのplot.json／plot_analysis.jsonを使い、parameters.methodsに比較対象を指定する。例：[0, 1, 2, 3, 9]。同条件の比較図・CSVは保存先を共有するため、描画を同時投入しない。
+
+ファイル変更とdry-runは、登録済み・実行中のジョブの名前・コマンドを変更しない。
+詳細は対象プロジェクトのmarkdown/Method1_Method2_Method3.mdを参照。PRRの改善は未検証。

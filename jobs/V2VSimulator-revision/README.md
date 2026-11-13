@@ -9,9 +9,9 @@
 | ディレクトリ | 内容 |
 |---|---|
 | [method-0](method-0/README.md) | method 0の学習・通常評価・詳細解析・特徴量比較 |
-| [method-1](method-1/README.md) | 共通method 0の学習・100 ms以内の上位2候補予告の通常評価・詳細解析 |
-| [method-2](method-2/README.md) | 共通method 0の学習・100 ms以内の上位4候補予告の通常評価・詳細解析 |
-| [method-3](method-3/README.md) | 共通method 0の基底モデル学習・method 3の通常評価・詳細解析 |
+| [method-1](method-1/README.md) | 評価時のSPS候補10%・予告なしのsoftmax、共通method 0の補助学習 |
+| [method-2](method-2/README.md) | 候補10%・method 9と同じ予告補正、確率移動上限10ポイント |
+| [method-3](method-3/README.md) | method 2と同じ候補10%・予告補正、確率移動上限20ポイント |
 | [method-4](method-4/README.md) | 共通method 0の基底モデル学習・method 4の通常評価・詳細解析 |
 | [method-5](method-5/README.md) | 最近傍1台・上位2候補予告の通常評価・詳細解析、共通method 0の学習 |
 | [method-6](method-6/README.md) | 最近傍1台・上位4候補予告の通常評価・詳細解析、共通method 0の学習 |
@@ -23,11 +23,14 @@
 履歴長は20・30、初期εは0.5です。学習はhighway 120台／urban 200台、評価・描画はhighway 120・360台／urban 200・500台です。
 モデルの評価上限は150,000学習steps（slot 149999）。method 1〜10はmethod 0の固定モデルを使うため追加学習は不要です。
 method-0〜10のtrainは同じ基底モデルを学習するので、必要な場合に一つだけ使います。
-method 1/2は100 ms以内の短期予告、method 3/4は再選択前の最後のCAMで予告し、RC=0で全近傍を使って最新Qの選択確率を補正します。
+method 1〜3は評価時のSPS候補を10%へ絞り、候補外の現在資源を追加する扱いを維持します。学習は20%のままです。
+method 1は予告なしの通常softmax、method 2はmethod 9と同じ最近傍3台・両flow・上位4候補の予告補正、method 3はその確率移動上限を10ポイントから20ポイントへ広げた方式です。
+method 2・3の平均Q低下の上限は同じ0.25で、実際の移動量が上限より小さくなることもあります。
+method 4は再選択前の最後のCAMで上位4候補を予告し、RC=0で全近傍を使って最新Qの確率を指数補正します。
 method 5/6も最後のCAMで予告し、RC=0で条件を満たす最近傍1台だけを参照して抽選確率を減らします。通知候補数はそれぞれ2・4です。
 method 7/8は有効な予告入りCAMの送信元から最近傍3台を先に選び、Basic・Extra両flowを参照します。通知候補数はそれぞれ2・4です。
 method 9/10は上位4候補を通知し、重なりの不確かさと平均Qの低下を制約に抽選確率を移します。参照範囲はmethod 9が最近傍3台、method 10が全ての有効予告です。
-旧method 5の協調RLモデルは使いません。旧method 1/2の協調枝モデル・キャッシュも使いません。
+旧method 5の協調RLモデルは使いません。旧method 1・2の短期予告、旧method 3の抽選結合・指数補正のキャッシュとも分離します。
 各構成・ジョブ数・前提条件はモデルごとのREADMEを参照してください。
 
 ## method 0のQ・V測定
@@ -65,16 +68,16 @@ python3 scheduler.py submit-batch jobs/V2VSimulator-revision/evaluate_baseline_a
 | `plot.json` | 通常評価の比較描画 |
 | `plot_analysis.json` | `--analysis-only` の比較描画 |
 
-比較対象は各JSONの先頭にある `parameters.methods` のリストだけで指定します。現在、通常描画は `[0]`、詳細解析の描画は `[0, 3, 4]` です。
-例えば次のように変更すると、highway・urbanの全ジョブでmethod 0・3・4をまとめて比較します。コマンドの編集は不要です。
+比較対象は各JSONの先頭にある `parameters.methods` のリストだけで指定します。現在の対象は各JSONを確認してください。
+例えば次のように変更すると、highway・urbanの全ジョブでmethod 0・1・2・3・9をまとめて比較します。コマンドの編集は不要です。
 
 ```json
 "parameters": {
-  "methods": [0, 3, 4]
+  "methods": [0, 1, 2, 3, 9]
 }
 ```
 
-`matrix` と異なりmethodごとにジョブを分割せず、`--method 0 3 4` として1つの比較に渡します。
+`matrix` と異なりmethodごとにジョブを分割せず、`--method 0 1 2 3 9` として1つの比較に渡します。
 通常描画とanalysis-onlyで対象を変える場合は、それぞれのJSONのリストを編集してください。
 SPS・IPMIは `--agents SPS IPMI Propose` により共通で比較します。
 method 0は既存Proposeで、省略時の既定値でもあります。保存名では `method0` が省略され、例えば `Propose_step20` がmethod 0に対応します。

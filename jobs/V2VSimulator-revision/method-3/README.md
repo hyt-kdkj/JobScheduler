@@ -1,60 +1,46 @@
-# Propose method 3 の基底モデル学習・測定・描画
+# method 3：SPS候補10%・確率移動上限20ポイント
 
-IDEAS.mdの順位1位・α7：選択確率を保つ抽選結合。
-**method 0の学習済みモデルを固定して評価する方式で、追加学習は不要。**
-`train_propose.json`は、method 3が利用する**method 0の基底モデルを学習する**バッチ。
-コマンドは明示的に`--method 0`を指定し、method 3の制御機構自体は学習しない。
-method-3とmethod-4のtrainは同じmethod 0の保存先を使うため、基底モデルが
-未学習の場合にどちらか一方だけを投入する。既存モデルがあれば学習を省略できる。
+method 2と同じ予告・候補・補正式を使い、移す確率量の上限だけを10ポイントから20ポイントへ広げる。上位4候補の予告、最近傍3台・Basic／Extra両flowの参照、未通知分の上下限、平均Q低下の上限0.25はmethod 2と同じ。
 
-既存method-1/2と同じく **initial-0.5・Transformerのみ**、履歴長20・30、
-mode=safe、option=A、XLA=off。利用可能な全サーバーから実行先を自動選択する。
-highwayは120台で学習したモデルを120・360台で、urbanは200台で学習した
-モデルを200・500台で評価する。全コマンドは150,000学習stepsの
-**slot 149999**を指定し、同条件のmethod 0のモデルを読み込む。
-履歴長・Encoder・εプロファイル・モデル互換性の検査は維持する。
-method 3用の補正枝ファイルは要求しない。
+移動量は最大20ポイントで、毎回この量を動かすわけではない。平均Q低下の上限0.25や予告の不確かさが先に制限となり、補正を見送る場合もある。決定資源の事前通知・応答・ユニキャストは追加しない。
+
+「候補10%」はQの上位10%ではなく、SPSと同じ予約RSRP除外後に平均S-RSSIが小さい資源から選ぶ割合。現在資源が候補外でも、method 0と同じく抽選対象へ追加する。
+
+**学習時は20%のまま。method 0の既存モデルを使うため追加学習は不要。**
+train_propose.jsonは不足している共通method 0のモデルを学習する補助バッチで、明示的に --method 0 を使う。全methodのtrainは同じ保存先を使うため、モデルが既にある場合は評価だけを実行する。
+
+## 実行条件
+
+- 履歴長20・30、Transformer、initial-0.5、mode=safe、option=A、XLA=off、評価epsilon=0。
+- Highwayは120台で学習したmethod 0を120・360台で評価する。
+- Urbanは200台で学習したmethod 0を200・500台で評価する。
+- 同じ履歴長・Encoder・学習条件のslot 149999を固定して読み込む。
+- サーバーの選択・除外GPU・同時実行上限は既存設定を使う。
 
 | ファイル | 内容 | 展開ジョブ数 |
 |---|---|---:|
-| `train_propose.json` | 共通のmethod 0をhighway 120台／urban 200台、150,000 stepsで学習 | 4 |
-| `evaluate_propose.json` | method 3の通常評価、15 seed（43〜57） | 8 |
-| `evaluate_propose_analysis.json` | method 3の詳細解析、seed 100・8,000 steps | 8 |
+| train_propose.json | 候補20%で共通method 0を学習。既存モデルがあれば不要 | 4 |
+| evaluate_propose.json | method 3の通常評価、15 seed（43〜57）・各5,000 steps | 8 |
+| evaluate_propose_analysis.json | method 3の詳細解析、seed100・8,000 steps | 8 |
 
-JobSchedulerディレクトリで内容確認する：
+ジョブ名にはsps10_tv20を含め、新しい方式であることを区別する。学習ジョブ名はsps20を含む。
+
+## 内容確認と投入
+
+JobSchedulerディレクトリで実行する。
 
 ```bash
-python3 scheduler.py submit-batch jobs/V2VSimulator-revision/method-3/train_propose.json --dry-run
 python3 scheduler.py submit-batch jobs/V2VSimulator-revision/method-3/evaluate_propose.json --dry-run
 python3 scheduler.py submit-batch jobs/V2VSimulator-revision/method-3/evaluate_propose_analysis.json --dry-run
-python3 scheduler.py submit-batch jobs/V2VSimulator-revision/plot.json --dry-run
-python3 scheduler.py submit-batch jobs/V2VSimulator-revision/plot_analysis.json --dry-run
+# method 0のモデルが未学習の場合のみ
+python3 scheduler.py submit-batch jobs/V2VSimulator-revision/method-3/train_propose.json --dry-run
 ```
 
-ジョブを投入するときは対象コマンドから`--dry-run`を外す。
-ソースは自動転送されないため、method 3/4の実装をサーバー側へ配置し、
-共有プロジェクトの`Simulator/save_model/`に対応するmethod 0の
-initial-0.5・slot 149999のモデルを用意する。
+投入時は対象コマンドから --dry-run を外す。学習・評価・描画の依存関係は自動登録されない。
+**サーバー側にも新しいmethod 1・2・3のソースを配置してから使う。** ソースは自動転送されない。
+旧method 1・2の短期予告、旧method 3の抽選結合・指数補正とは別方式で、旧測定キャッシュは新方式の結果として流用しない。
 
-評価と描画は別バッチであり、依存関係は自動登録されない。
-描画は`--step 20 30`をまとめて渡し、不足するSPS・IPMI・method 0・
-method 3の測定は描画プログラムが自動で実行する。
-重複実行を避けるため、対応する評価が完了してから描画を投入する。
+描画は親ディレクトリのplot.json／plot_analysis.jsonを使い、parameters.methodsに比較対象を指定する。例：[0, 1, 2, 3, 9]。同条件の比較図・CSVは保存先を共有するため、描画を同時投入しない。
 
-現在の描画プログラムでは、同じシナリオ・台数・Encoder・εの比較図と比較CSVの
-保存先を共有する。method-3とmethod-4の同条件の描画は同時投入せず、
-比較図を両方残す場合は先の出力を別ディレクトリへ保存してから次を実行する。
-最後の比較対象は`comparison_manifest.json`で確認できる。
-方式別の元測定レコードは独立して保存される。
-
-結果はmethod 3としてmethod 0や他方式と分離し、通知・失効・fallback等の
-指標も保存する。通知は既存300-byte CAM内の13-byte研究用領域を使う。
-2回の通常CAMによる予告・結果通知が成立する場合に条件付き抽選し、不達・失効等は記録する。
-PRR向上はまだ未検証。方式の詳細と制約は対象リポジトリの
-`IDEAS.md`と`Simulator/COOPERATION.md`を参照する。
-
-ファイル作成・dry-runだけではジョブを登録・実行しない。
-
-描画用JSONは親ディレクトリに集約しています。このディレクトリ内のJSONは学習・評価用です。
-
-共通描画JSONの先頭にある `parameters.methods` に対象の番号を追加してください（例：`[0, 3, 4]`）。コマンドの編集は不要です。
+ファイル変更とdry-runは、登録済み・実行中のジョブの名前・コマンドを変更しない。
+詳細は対象プロジェクトのmarkdown/Method1_Method2_Method3.mdを参照。PRRの改善は未検証。
