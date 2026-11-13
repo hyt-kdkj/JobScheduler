@@ -1,16 +1,15 @@
-# method 9：予告入りCAMの最近傍3台・両flow・上位4候補版
+# method 9：最近傍3台の予告に基づく、Q低下制約付き確率移動
 
-再選択前の最後のBasic CAMで上位4候補と元の選択確率を通知する。
-自分のRC=0で最新Qを計算し、有効な予告入りCAMの送信元から最近傍3台を選ぶ。
-選んだ車両のBasic・Extra両flowの有効な予告を参照し、資源の重なりに応じて
-抽選確率を補正する。3台を選んでから重なりを評価し、重なりがない場合も
-4台目へ繰り上げない。確定資源の事前通知は送らない。
+再選択前の最後のBasic CAMで上位4候補と元の選択確率を通知し、RC=0で最新Qを計算する。
+有効な予告入りCAMを持つ最近傍3台のBasic・Extra両flowを参照する。
+通知されなかった確率を含めた重なりの下限・上限を計算し、
+重なりが減る根拠と平均Qの低下予算を満たす場合だけ、抽選確率の一部を移す。
+確定資源の事前通知は送らない。
 
 **同条件のmethod 0の学習済みモデルを使用し、追加学習は不要。**
-旧method 9の協調RLモデルは使わない。
-`train_propose.json`は必要な場合だけ共通のmethod 0を学習する補助バッチであり、
-コマンドは`--method 0`を指定する。method-0〜8のtrainは同じモデル保存先を使うため、
-未学習の場合に一つだけ投入する。既存モデルがあれば評価から開始できる。
+`train_propose.json`は共通method 0を学習する補助バッチで、`--method 0`を指定する。
+method-0〜10のtrainは同じモデル保存先を使うため、未学習の場合に一つだけ投入する。
+既存モデルがあれば評価から開始できる。
 
 ## 実行条件
 
@@ -18,32 +17,32 @@
 - Highwayは120台で学習したmethod 0を120・360台で評価する。
 - Urbanは200台で学習したmethod 0を200・500台で評価する。
 - 読み込むモデルは150,000学習stepsのslot 149999に固定する。
+- 実行先は`hosts.json`の利用可能な全サーバーから選ぶ。除外GPUと同時実行上限は維持する。
 
 | ファイル | 内容 | 展開ジョブ数 |
 |---|---|---:|
 | `train_propose.json` | 共通method 0の学習。既存モデルがあれば不要 | 4 |
-| `evaluate_propose.json` | method 9の通常評価、15 seed（43〜57） | 8 |
-| `evaluate_propose_analysis.json` | method 9の詳細解析、seed100・評価8,000 steps | 8 |
+| `evaluate_propose.json` | method 9の通常評価、15 seed（43〜57）、評価5,000 steps | 8 |
+| `evaluate_propose_analysis.json` | method 9の詳細解析、seed100、評価8,000 steps | 8 |
 
 ## 内容確認と投入
 
 JobSchedulerディレクトリで実行する。
 
 ```bash
-python3 scheduler.py submit-batch jobs/V2VSimulator-revision/method-8/evaluate_propose.json --dry-run
-python3 scheduler.py submit-batch jobs/V2VSimulator-revision/method-8/evaluate_propose_analysis.json --dry-run
+python3 scheduler.py submit-batch jobs/V2VSimulator-revision/method-9/evaluate_propose.json --dry-run
+python3 scheduler.py submit-batch jobs/V2VSimulator-revision/method-9/evaluate_propose_analysis.json --dry-run
 # method 0のモデルが未学習の場合のみ
-python3 scheduler.py submit-batch jobs/V2VSimulator-revision/method-8/train_propose.json --dry-run
+python3 scheduler.py submit-batch jobs/V2VSimulator-revision/method-9/train_propose.json --dry-run
 ```
 
 投入時は対象コマンドから`--dry-run`を外す。バッチ間の依存関係は自動登録されない。
-method 7・8を実装したソースをサーバー側に配置してから使用する。ソースは自動転送されない。
-ファイル作成とdry-runだけではジョブは登録・実行されない。
+method 9・10を実装したソースをサーバー側に配置してから使用する。ソースは自動転送されない。
+ファイル変更とdry-runだけではジョブは登録・実行されず、登録済みジョブの名前・コマンドも変わらない。
 
 描画は親ディレクトリの`plot.json`／`plot_analysis.json`を使い、先頭の
-`parameters.methods`に対象番号を含める。例：`[0, 5, 6, 7, 8]`。
+`parameters.methods`に対象番号を含める。例：`[0, 8, 9, 10]`。
 評価完了後に描画する。同条件の比較図・CSVは出力先を共有するため、描画は同時投入しない。
-方式別の元測定と旧method 9の結果は、プロトコル識別子とモデル情報で区別する。
+方式別の元測定は、プロトコル識別子とモデル情報で区別する。
 
-詳細は対象プロジェクトの`markdown/Method7_Method8.md`を参照。
-PRR向上の実測比較はまだ行っていない。
+詳細は対象プロジェクトの`markdown/Method9_Method10_Proposals.md`を参照。

@@ -4,7 +4,7 @@
   },
   "jobs": [
     {
-      "name": "eval_propose_method8_highway_{step}_{num_vehicles}_analysis_{encoder}_initial-0.5",
+      "name": "eval_propose_method9_highway_{step}_{num_vehicles}_analysis_{encoder}_initial-0.5",
       "command": "python3 evaluate_methods.py --agents Propose --method 9 --scenario highway --step {step} --num-vehicles {num_vehicles} --encoder {encoder} --epsilon-profile initial-0.5 --mode safe --option A --xla off --model highway:120 --load-slot 149999 --analysis-only --analysis-seed 100",
       "matrix": {
         "step": [
@@ -21,7 +21,7 @@
       }
     },
     {
-      "name": "eval_propose_method8_urban_{step}_{num_vehicles}_analysis_{encoder}_initial-0.5",
+      "name": "eval_propose_method9_urban_{step}_{num_vehicles}_analysis_{encoder}_initial-0.5",
       "command": "python3 evaluate_methods.py --agents Propose --method 9 --scenario urban --step {step} --num-vehicles {num_vehicles} --encoder {encoder} --epsilon-profile initial-0.5 --mode safe --option A --xla off --model urban:200 --load-slot 149999 --analysis-only --analysis-seed 100",
       "matrix": {
         "step": [
