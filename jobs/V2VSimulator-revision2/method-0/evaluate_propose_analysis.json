@@ -5,7 +5,7 @@
   "jobs": [
     {
       "name": "revision2_eval_propose_method0_highway_{step}_{num_vehicles}_analysis_{encoder}_{epsilon_profile}",
-      "command": "python3 evaluate_methods.py --method 0 --agents Propose --scenario highway --step {step} --num-vehicles {num_vehicles} --analysis-only --encoder {encoder} --epsilon-profile {epsilon_profile}",
+      "command": "python3 evaluate_methods.py --method 0 --agents Propose --scenario highway --step {step} --num-vehicles {num_vehicles} --analysis-only --encoder {encoder} --epsilon-profile {epsilon_profile} --load-slot 199999",
       "matrix": {
         "step": [
           20
@@ -24,7 +24,7 @@
     },
     {
       "name": "revision2_eval_propose_method0_urban_{step}_{num_vehicles}_analysis_{encoder}_{epsilon_profile}",
-      "command": "python3 evaluate_methods.py --method 0 --agents Propose --scenario urban --step {step} --num-vehicles {num_vehicles} --analysis-only --encoder {encoder} --epsilon-profile {epsilon_profile}",
+      "command": "python3 evaluate_methods.py --method 0 --agents Propose --scenario urban --step {step} --num-vehicles {num_vehicles} --analysis-only --encoder {encoder} --epsilon-profile {epsilon_profile} --load-slot 199999",
       "matrix": {
         "step": [
           20
