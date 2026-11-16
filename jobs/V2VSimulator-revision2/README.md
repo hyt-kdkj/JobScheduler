@@ -1,5 +1,7 @@
 # V2VSimulator-revision2 のジョブ定義
 
+2026-11-16更新：Proposeの入力は`resource-neighborhood-v2`、既定報酬は`packet-link-difference-reward3`（λ=3、固定正規化10リンク）です。全methodの学習・評価・特徴量比較バッチに報酬を明示し、ジョブ名に`linkdiff3_ctx2`を付けます。新入力・新報酬には再学習が必要で、旧モデルは読み替えません。method 1/2の学習参照先は引き続きmethod 0です。バッチ更新はジョブ投入を行いません。
+
 全JSONの`defaults.project`は`V2VSimulator-revision2`です。現行methodは0・1・2です。
 
 | ディレクトリ | 内容 |
