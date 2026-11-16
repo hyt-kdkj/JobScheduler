@@ -4,22 +4,30 @@
   },
   "jobs": [
     {
-      "name": "revision2_eval_baseline_highway_{num_vehicles}_analysis",
-      "command": "python3 evaluate_methods.py --agents SPS IPMI --step 20 --scenario highway --num-vehicles {num_vehicles} --analysis-only",
+      "name": "revision2_eval_{agent}_highway_{num_vehicles}_analysis",
+      "command": "env OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 TF_NUM_INTRAOP_THREADS=2 TF_NUM_INTEROP_THREADS=1 python3 evaluate_methods.py --agents {agent} --step 20 --scenario highway --num-vehicles {num_vehicles} --analysis-only --epsilon-profile initial-0.5",
       "matrix": {
         "num_vehicles": [
           120,
           360
+        ],
+        "agent": [
+          "SPS",
+          "IPMI"
         ]
       }
     },
     {
-      "name": "revision2_eval_baseline_urban_{num_vehicles}_analysis",
-      "command": "python3 evaluate_methods.py --agents SPS IPMI --step 20 --scenario urban --num-vehicles {num_vehicles} --analysis-only",
+      "name": "revision2_eval_{agent}_urban_{num_vehicles}_analysis",
+      "command": "env OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 TF_NUM_INTRAOP_THREADS=2 TF_NUM_INTEROP_THREADS=1 python3 evaluate_methods.py --agents {agent} --step 20 --scenario urban --num-vehicles {num_vehicles} --analysis-only --epsilon-profile initial-0.5",
       "matrix": {
         "num_vehicles": [
           200,
           500
+        ],
+        "agent": [
+          "SPS",
+          "IPMI"
         ]
       }
     }
