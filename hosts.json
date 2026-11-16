@@ -12,6 +12,11 @@
       "container": "v2vsimulator-revision-v2v-dev-1",
       "workdir": "/workspace/V2VSimulator/Simulator",
       "template_start_script": "~/workspace/V2VSimulator-revision/docker-shell.sh"
+    },
+    "V2VSimulator-revision2": {
+      "container": "v2vsimulator-revision2-v2v-dev-1",
+      "workdir": "/workspace/V2VSimulator/Simulator",
+      "template_start_script": "~/workspace/V2VSimulator-revision2/docker-shell.sh"
     }
   },
   "idle_max_used_mib": 512,

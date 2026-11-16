@@ -75,6 +75,20 @@ Propose の時間 Encoder はコマンドの `--encoder no|LSTM|Transformer` で
 
 バッチ JSON の `defaults` または各ジョブにも `"project": "V2VSimulator-revision"` を指定できます。優先順位は、コマンドの `--project` → 各ジョブの `project` → `defaults.project` → `hosts.json` の `default_project` です。
 
+### V2VSimulator-revision2 を使う
+
+`hosts.json`の`projects`に`V2VSimulator-revision2`を追加しています。SSH先の`~/workspace/V2VSimulator-revision2/docker-shell.sh`を使い、テンプレートコンテナは`v2vsimulator-revision2-v2v-dev-1`です。コンテナ内の作業先は`/workspace/V2VSimulator/Simulator`です。
+
+```bash
+# revision2専用の学習バッチを確認（ジョブ登録・SSH接続なし）
+python3 scheduler.py submit-batch jobs/V2VSimulator-revision2/method-0/train_propose.json --dry-run
+
+# 既存のバッチをrevision2へ切り替えて確認する場合
+python3 scheduler.py submit-batch jobs/V2VSimulator-revision/method-0/train_propose.json --project V2VSimulator-revision2 --dry-run
+```
+
+revision2専用の全54バッチと使い方は[ジョブ定義](jobs/V2VSimulator-revision2/README.md)を参照してください。専用バッチのジョブ名には`revision2_`を付けています。各SSH先にrevision2のソースと必要なモデルを配置してください。投入するときは`--dry-run`を外します。
+
 ### ホストのドライバを変更せず GPU 環境を修復する
 
 `prepare_gpu_environment.py` を計算ホストで実行すると、指定した `docker-shell.sh` をバックアップし、GPU の生成設定をホスト別の `~/.cache/job-scheduler/<hostname>/` に保存するよう変更します。共有 HOME 上で別ホストのデバイス設定が混ざることを防ぎます。
