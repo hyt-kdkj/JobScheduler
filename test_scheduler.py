@@ -273,6 +273,18 @@ class SchedulingTest(unittest.TestCase):
         self.assertEqual(s.host_request(saved_cfg, 'marimba')['excluded_gpu_uuids'], ['GPU-p100'])
         self.assertEqual(s.host_request(saved_cfg, 'xylophone0')['excluded_gpu_uuids'], [])
 
+    def test_gpu_name_exclusion_applies_globally_and_to_existing_jobs(self):
+        self.cfg['excluded_gpu_names'] = ['p100']
+        next(h for h in self.cfg['hosts'] if h['ssh'] == 'marimba')['excluded_gpu_names'] = ['other-model']
+        job = s.new_job(self.cfg, dict(command='echo test'))
+        old_execution = s.job_configuration(self.cfg, job)
+        self.assertEqual(s.host_request(old_execution, 'marimba')['excluded_gpu_names'], ['p100', 'other-model'])
+        self.assertEqual(s.host_request(old_execution, 'xylophone0')['excluded_gpu_names'], ['p100'])
+        slow = self.gpu('Tesla P100-PCIE-16GB', 'xylophone0', uuid='GPU-p100')
+        fast = self.gpu('NVIDIA GeForce RTX 5070 Ti', 'xylophone0', uuid='GPU-5070')
+        inv = {'xylophone0': {'gpus': [slow, fast]}}
+        self.assertEqual(s.candidates(old_execution, inv, job), [fast])
+
     def test_gpu_exclusion_configuration_rejects_malformed_values(self):
         path = Path(self.temp.name) / 'hosts.json'
         for invalid in ('GPU-p100', [0], ['']):
@@ -280,6 +292,12 @@ class SchedulingTest(unittest.TestCase):
             cfg['hosts'][0]['excluded_gpu_uuids'] = invalid
             path.write_text(json.dumps(cfg))
             with self.assertRaisesRegex(ValueError, 'excluded_gpu_uuids'):
+                s.configuration(path)
+        for invalid in ('P100', [0], ['']):
+            cfg = copy.deepcopy(self.cfg)
+            cfg['excluded_gpu_names'] = invalid
+            path.write_text(json.dumps(cfg))
+            with self.assertRaisesRegex(ValueError, 'excluded_gpu_names'):
                 s.configuration(path)
 
     def test_lost_launch_reply_retries_same_id_and_target(self):
@@ -1250,6 +1268,12 @@ class DetachedLifecycleTest(unittest.TestCase):
         self.req['gpu'] = 'GPU-test-2'
         self.assertEqual(self.ns['main'](self.req)['status'], 'reserved')
         self.assertEqual(self.wait_result()['status'], 'succeeded')
+
+    def test_name_excluded_gpu_is_visible_but_cannot_launch(self):
+        self.req['excluded_gpu_names'] = ['gtx 1080 ti']
+        gpus = self.ns['main'](dict(self.req, action='probe'))['gpus']
+        self.assertTrue(all(g['excluded'] and not g['accepting_jobs'] for g in gpus))
+        self.assertEqual(self.ns['main'](self.req)['status'], 'busy')
 
     def test_recovered_monitor_collects_logs_and_failure_without_relaunch(self):
         directory = self.ns['job_path'](self.req['id'])

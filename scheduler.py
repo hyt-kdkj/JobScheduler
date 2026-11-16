@@ -126,6 +126,10 @@ def configuration(path):
                 not isinstance(value, str) or not value.startswith('GPU-') or len(value) <= 4
                 for value in excluded):
             raise ValueError('excluded_gpu_uuids must be a list of GPU UUIDs')
+        excluded_names = entry.get('excluded_gpu_names', [])
+        if not isinstance(excluded_names, list) or any(
+                not isinstance(value, str) or not value.strip() for value in excluded_names):
+            raise ValueError('excluded_gpu_names must be a list of nonempty strings')
         limit = entry.get('max_jobs_per_gpu', cfg.get('max_jobs_per_gpu', 1))
         if not isinstance(limit, int) or isinstance(limit, bool) or limit < 1:
             raise ValueError('max_jobs_per_gpu must be a positive integer')
@@ -176,6 +180,7 @@ def host_request(cfg, host):
     if entry.get('max_jobs_per_host', cfg.get('max_jobs_per_host')) is not None:
         result['max_jobs_per_host'] = entry.get('max_jobs_per_host', cfg.get('max_jobs_per_host'))
     result['excluded_gpu_uuids'] = list(entry.get('excluded_gpu_uuids', cfg.get('excluded_gpu_uuids', [])))
+    result['excluded_gpu_names'] = list(cfg.get('excluded_gpu_names', [])) + list(entry.get('excluded_gpu_names', []))
     return result
 
 
@@ -204,11 +209,15 @@ def candidates(cfg, inv, job, host_counts=None):
               for entry in cfg['hosts']}
     excluded = {entry['ssh']: set(entry.get('excluded_gpu_uuids', cfg.get('excluded_gpu_uuids', [])))
                 for entry in cfg['hosts']}
+    excluded_names = {entry['ssh']: cfg.get('excluded_gpu_names', []) + entry.get('excluded_gpu_names', [])
+                      for entry in cfg['hosts']}
     options = [gpu for host, data in inv.items() for gpu in data.get('gpus', [])
                if (not job.get('requested_host') or job['requested_host'] == host)
                and (limits.get(host) is None or
                     max(host_counts.get(host, 0), data.get('host_occupied_jobs', 0)) < limits[host])
                and gpu['uuid'] not in excluded.get(host, set())
+               and not any(pattern.casefold() in gpu['name'].casefold()
+                           for pattern in excluded_names.get(host, []))
                and gpu.get('accepting_jobs', gpu['idle'])
                and gpu.get('available_mib', gpu['total_mib'] - gpu['used_mib']) >= job['min_free_mib']]
     # Stable order for equal GPU models; priority is configurable, not a benchmark.

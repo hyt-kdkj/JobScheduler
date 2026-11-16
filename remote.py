@@ -371,7 +371,9 @@ def probe_running(req):
         gpu['accepting_jobs'] = (gpu['idle'] if limit == 1 else
                                  slots < limit and gpu['available_mib'] > 0
                                  and not any(j['status'] == 'unknown' for j in jobs))
-        gpu['excluded'] = uuid in req.get('excluded_gpu_uuids', [])
+        gpu['excluded'] = (uuid in req.get('excluded_gpu_uuids', []) or
+                           any(pattern.casefold() in name.casefold()
+                               for pattern in req.get('excluded_gpu_names', [])))
         if gpu['excluded']:
             gpu['accepting_jobs'] = False
         if host_limit is not None and host_jobs >= host_limit:

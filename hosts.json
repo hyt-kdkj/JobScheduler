@@ -25,6 +25,7 @@
   "max_jobs_per_host": 2,
   "max_ssh_connections": 1,
   "gpu_memory_headroom_mib": 1024,
+  "excluded_gpu_names": ["P100"],
   "shared_queue": {
     "host": "glockenspiel"
   },
@@ -33,7 +34,8 @@
     "RTX 5000 Ada": 100,
     "Quadro RTX 6000": 60,
     "GTX 1080 Ti": 40,
-    "P100": 30
+    "P100": 30,
+    "RTX 5070 Ti": 80
   },
   "hosts": [
     {
@@ -50,6 +52,9 @@
     },
     {
       "ssh": "xylophone1"
+    },
+    {
+      "ssh": "xylophone3"
     }
   ]
 }

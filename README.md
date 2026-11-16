@@ -205,7 +205,7 @@ python3 scheduler.py gpus
 
 `max_jobs_per_gpu` と `gpu_memory_headroom_mib` で上限・余裕を変更できます。必要 VRAM は投入判断用で、実行時の使用量を制限しません。割当ては `CUDA_VISIBLE_DEVICES` で行うため、学習コマンドの `--gpu` は省略するか `auto` にしてください。
 
-ホスト設定の `excluded_gpu_uuids` に指定した GPU は新規投入から除外し、`gpus` では `EXCLUDED` と表示します。marimba は Tesla P100（GPU 0）を除外し、Quadro RTX 6000（GPU 1）のみを使用します。登録済みの待機ジョブにも適用し、実行中のジョブは継続します。
+`excluded_gpu_names` に指定した文字列を名前に含むGPUと、ホスト設定の `excluded_gpu_uuids` に指定したGPUは新規投入から除外し、`gpus` では `EXCLUDED` と表示します。全ホストでP100を除外し、marimba では Quadro RTX 6000（GPU 1）を使用します。登録済みの待機ジョブにも適用し、実行中のジョブは継続します。
 
 ### ドライバ不一致への対応
 
@@ -219,7 +219,7 @@ docker cp ~/.local/share/job-scheduler/driver-libraries/580.173.02/lib \
   v2vsimulator-v2v-dev-1:/opt/nvidia-driver-580.173.02/
 ```
 
-既存の環境イメージは、全ジョブ終了後に対象キャッシュを削除して更新します。ホストの NVIDIA ドライバ自体が動いていない場合は、この対応では解決しません。xylophone3 はホスト側の整備が必要です。
+既存の環境イメージは、全ジョブ終了後に対象キャッシュを削除して更新します。ホストの NVIDIA ドライバ自体が動いていない場合は、この対応では解決しません。xylophone3 は RTX 5070 Ti を使用し、ホストのドライバに一致するライブラリをコンテナにマウントします。
 
 ## 自動投入（cron）
 
