@@ -1,10 +1,6 @@
 {
   "parameters": {
-    "methods": [
-      0,
-      1,
-      2
-    ]
+    "methods": [0,1,2]
   },
   "defaults": {
     "project": "V2VSimulator-revision2"
