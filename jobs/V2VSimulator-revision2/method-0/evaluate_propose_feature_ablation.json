@@ -4,7 +4,7 @@
   },
   "jobs": [
     {
-      "name": "revision2_feature_ablation_propose_method0_highway_{step}_{num_vehicles}_{encoder}_{epsilon_profile}_linkdiff3_ctx2",
+      "name": "revision2_feature_ablation_propose_method0_highway_{step}_{num_vehicles}_{encoder}_{epsilon_profile}_linkdiff3_packedv3_T05",
       "command": "python3 evaluate_feature_ablation.py --method 0 --agents Propose --scenario highway --step {step} --num-vehicles {num_vehicles} --model highway:120 --analysis-only --encoder {encoder} --epsilon-profile {epsilon_profile} --load-slot 199999 --reward-type packet-link-difference-reward3",
       "matrix": {
         "step": [
@@ -22,7 +22,7 @@
       }
     },
     {
-      "name": "revision2_feature_ablation_propose_method0_urban_{step}_{num_vehicles}_{encoder}_{epsilon_profile}_linkdiff3_ctx2",
+      "name": "revision2_feature_ablation_propose_method0_urban_{step}_{num_vehicles}_{encoder}_{epsilon_profile}_linkdiff3_packedv3_T05",
       "command": "python3 evaluate_feature_ablation.py --method 0 --agents Propose --scenario urban --step {step} --num-vehicles {num_vehicles} --model urban:200 --analysis-only --encoder {encoder} --epsilon-profile {epsilon_profile} --load-slot 199999 --reward-type packet-link-difference-reward3",
       "matrix": {
         "step": [

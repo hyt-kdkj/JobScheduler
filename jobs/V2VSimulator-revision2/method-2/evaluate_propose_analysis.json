@@ -4,7 +4,7 @@
   },
   "jobs": [
     {
-      "name": "revision2_eval_propose_method2_highway_{step}_{num_vehicles}_analysis_{encoder}_initial-0.5_linkdiff3_ctx2",
+      "name": "revision2_eval_propose_method2_highway_{step}_{num_vehicles}_analysis_{encoder}_initial-0.5_linkdiff3_packedv3_T05",
       "command": "env OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 TF_NUM_INTRAOP_THREADS=2 TF_NUM_INTEROP_THREADS=1 python3 evaluate_methods.py --agents Propose --method 2 --scenario highway --step {step} --num-vehicles {num_vehicles} --encoder {encoder} --epsilon-profile initial-0.5 --mode safe --option A --xla off --model highway:120 --load-slot 199999 --analysis-only --analysis-seed 10000 --reward-type packet-link-difference-reward3",
       "matrix": {
         "step": [
@@ -19,7 +19,7 @@
       }
     },
     {
-      "name": "revision2_eval_propose_method2_urban_{step}_{num_vehicles}_analysis_{encoder}_initial-0.5_linkdiff3_ctx2",
+      "name": "revision2_eval_propose_method2_urban_{step}_{num_vehicles}_analysis_{encoder}_initial-0.5_linkdiff3_packedv3_T05",
       "command": "env OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 TF_NUM_INTRAOP_THREADS=2 TF_NUM_INTEROP_THREADS=1 python3 evaluate_methods.py --agents Propose --method 2 --scenario urban --step {step} --num-vehicles {num_vehicles} --encoder {encoder} --epsilon-profile initial-0.5 --mode safe --option A --xla off --model urban:200 --load-slot 199999 --analysis-only --analysis-seed 10000 --reward-type packet-link-difference-reward3",
       "matrix": {
         "step": [
