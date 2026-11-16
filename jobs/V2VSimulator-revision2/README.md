@@ -1,6 +1,6 @@
 # V2VSimulator-revision2 のジョブ定義
 
-2026-11-16更新：Proposeは候補＋現在資源をNNへ渡す`packed_candidates_current_*_v3`です。既定報酬は`packet-link-difference-reward3`（λ=3、÷10なし）、softmax温度0.5、協調Q低下予算2.5です。学習・評価・特徴量比較バッチのジョブ名に`linkdiff3_packedv3_T05`を付けます。新しいモデル名には`unscaled-candidates-v3`が入り、旧モデル・旧測定とは区別します。method 1/2の学習参照先は引き続きmethod 0です。バッチ更新はジョブ投入を行いません。
+2026-11-16更新：Proposeの既定報酬は`packet-prr-difference-reward3`（自送信の期待PRR−3×他パケットのPRR損失の和、各パケットの受信対象数で正規化、固定÷10なし）です。候補＋現在資源のNN、17枠の周辺要約、softmax温度0.5、協調Q低下予算2.5を維持し、CPU集計とReplay準備の高速化を有効にします。ジョブ名は`prrdiff3_packedv4_T05`、モデル名は`per-packet-prr-candidates-v4`で旧リンク数報酬と区別します。通常100,000 step×10 seed、詳細100,000 step、method 1/2の学習参照先method 0は維持します。バッチ更新はジョブ投入を行いません。
 
 全JSONの`defaults.project`は`V2VSimulator-revision2`です。現行methodは0・1・2です。
 
