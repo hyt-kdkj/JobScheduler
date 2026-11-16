@@ -1,29 +1,28 @@
 # V2VSimulator-revision2 のジョブ定義
 
-全JSONの`defaults.project`は`V2VSimulator-revision2`です。ジョブ名には`revision2_`を付けています。
-既存の`../V2VSimulator-revision/`の全54バッチと同じ条件を使い、実行するプロジェクトをrevision2へ切り替えた定義です。
+全JSONの`defaults.project`は`V2VSimulator-revision2`です。現行methodは0・1・2です。
 
-- `method-0/`〜`method-15/`：学習・通常評価・詳細解析。評価専用methodの学習ジョブはmethod 0を指定します。
-- `method-0/evaluate_propose_feature_ablation.json`：特徴量比較。
-- `evaluate_baseline.json`・`evaluate_baseline_analysis.json`：SPS・IPMIの通常評価・詳細解析。
-- `plot.json`・`plot_analysis.json`：method間の比較描画。対象methodは各JSONの`parameters.methods`で指定します。
-- `measure_method0_qv_highway.json`：method 0のHighway Q・V測定。
+| ディレクトリ | 内容 |
+|---|---|
+| `method-0/` | 基底モデルの学習・通常評価・詳細解析・特徴量比較 |
+| `method-1/` | 旧method 11：累積確率95%・最大8候補の予告、単一移動元、移動上限10ポイント |
+| `method-2/` | 旧method 15：同じ予告、最大4移動元、移動総量上限20ポイント |
 
-履歴長、Encoder、台数、モデル参照条件、checkpoint、学習ε profileは対応する既存revisionのJSONを引き継いでいます。詳細は各JSONを参照してください。
-revision2の自車両内の送信重複の除外、20 ms：50 ms＝20：80の車両割合はシミュレータ側で適用されます。通信仕様は[Methods.md](../../../V2VSimulator-revision2/markdown/Methods.md)を参照してください。
+method 1/2は同じmethod 0モデルを参照します。各`train_propose.json`も`--method 0`を指定するため、学習は一つのバッチだけを使います。
+履歴長は全バッチで`--step 20`に固定しています。その他の評価条件は旧method 11/15のバッチを引き継いでいます。履歴長・Encoder・シナリオ・台数・学習ε profile・モデル参照先・checkpointは各JSONを参照してください。
 
-JobSchedulerディレクトリで実行します。
+共通の`evaluate_baseline.json`・`evaluate_baseline_analysis.json`はSPS/IPMI用です。
+`plot.json`・`plot_analysis.json`はmethod 0/1/2を比較します。比較対象は`parameters.methods`で指定します。
+QV測定の専用バッチは削除しました。現在は全14バッチです。
 
 ```bash
-# 展開確認（登録・SSH接続なし）
+# JobScheduler内で実行。展開確認だけで登録・SSH接続は行いません。
 python3 scheduler.py submit-batch jobs/V2VSimulator-revision2/method-0/train_propose.json --dry-run
-python3 scheduler.py submit-batch jobs/V2VSimulator-revision2/method-0/evaluate_propose.json --dry-run
-python3 scheduler.py submit-batch jobs/V2VSimulator-revision2/method-0/evaluate_propose_analysis.json --dry-run
+python3 scheduler.py submit-batch jobs/V2VSimulator-revision2/method-1/evaluate_propose.json --dry-run
+python3 scheduler.py submit-batch jobs/V2VSimulator-revision2/method-2/evaluate_propose_analysis.json --dry-run
 python3 scheduler.py submit-batch jobs/V2VSimulator-revision2/plot_analysis.json --dry-run
 ```
 
-投入するときは対象コマンドの`--dry-run`を外します。バッチ間の依存関係は自動登録されません。
-評価対象のモデルはrevision2側に用意してください。評価専用methodは同じrevision2内のmethod 0モデルを使います。
-
-各SSH先に`~/workspace/V2VSimulator-revision2`と`docker-shell.sh`が必要です。コンテナ名は`v2vsimulator-revision2-v2v-dev-1`、コンテナ内の作業先は`/workspace/V2VSimulator/Simulator`です。ソースやモデルの自動転送は行いません。
-設定の追加とdry-runでは、ジョブ投入やコンテナの起動は行われません。
+投入するときは`--dry-run`を外します。バッチ間の依存関係は自動登録されません。
+各SSH先に`~/workspace/V2VSimulator-revision2`と必要なモデルを配置してください。ソース・モデルは自動転送されません。
+revision2の現行仕様は[Methods.md](../../../V2VSimulator-revision2/markdown/Methods.md)を参照してください。過去のmethod番号と現行の番号を混同しないでください。

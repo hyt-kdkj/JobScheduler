@@ -87,7 +87,7 @@ python3 scheduler.py submit-batch jobs/V2VSimulator-revision2/method-0/train_pro
 python3 scheduler.py submit-batch jobs/V2VSimulator-revision/method-0/train_propose.json --project V2VSimulator-revision2 --dry-run
 ```
 
-revision2専用の全54バッチと使い方は[ジョブ定義](jobs/V2VSimulator-revision2/README.md)を参照してください。専用バッチのジョブ名には`revision2_`を付けています。各SSH先にrevision2のソースと必要なモデルを配置してください。投入するときは`--dry-run`を外します。
+revision2専用の全14バッチと使い方は[ジョブ定義](jobs/V2VSimulator-revision2/README.md)を参照してください。専用バッチのジョブ名には`revision2_`を付けています。各SSH先にrevision2のソースと必要なモデルを配置してください。投入するときは`--dry-run`を外します。
 
 ### ホストのドライバを変更せず GPU 環境を修復する
 

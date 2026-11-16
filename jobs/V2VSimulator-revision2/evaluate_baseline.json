@@ -5,7 +5,7 @@
   "jobs": [
     {
       "name": "revision2_eval_baseline_highway_{num_vehicles}",
-      "command": "python3 evaluate_methods.py --agents SPS IPMI --scenario highway --num-vehicles {num_vehicles}",
+      "command": "python3 evaluate_methods.py --agents SPS IPMI --step 20 --scenario highway --num-vehicles {num_vehicles}",
       "matrix": {
         "num_vehicles": [
           120,
@@ -15,7 +15,7 @@
     },
     {
       "name": "revision2_eval_baseline_urban_{num_vehicles}",
-      "command": "python3 evaluate_methods.py --agents SPS IPMI --scenario urban --num-vehicles {num_vehicles}",
+      "command": "python3 evaluate_methods.py --agents SPS IPMI --step 20 --scenario urban --num-vehicles {num_vehicles}",
       "matrix": {
         "num_vehicles": [
           200,

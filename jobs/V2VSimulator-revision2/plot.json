@@ -1,7 +1,9 @@
 {
   "parameters": {
     "methods": [
-      0
+      0,
+      1,
+      2
     ]
   },
   "defaults": {
@@ -9,8 +11,8 @@
   },
   "jobs": [
     {
-      "name": "revision2_plot_propose_highway_steps20to30_{num_vehicles}_{encoder}_{epsilon_profile}",
-      "command": "python3 plot_evaluation.py --agents SPS IPMI Propose --method {methods} --scenario highway --step 20 30 --num-vehicles {num_vehicles} --encoder {encoder} --epsilon-profile {epsilon_profile}",
+      "name": "revision2_plot_propose_highway_step20_{num_vehicles}_{encoder}_{epsilon_profile}",
+      "command": "python3 plot_evaluation.py --agents SPS IPMI Propose --method {methods} --scenario highway --step 20 --num-vehicles {num_vehicles} --encoder {encoder} --epsilon-profile {epsilon_profile}",
       "matrix": {
         "num_vehicles": [
           120,
@@ -25,8 +27,8 @@
       }
     },
     {
-      "name": "revision2_plot_propose_urban_steps20to30_{num_vehicles}_{encoder}_{epsilon_profile}",
-      "command": "python3 plot_evaluation.py --agents SPS IPMI Propose --method {methods} --scenario urban --step 20 30 --num-vehicles {num_vehicles} --encoder {encoder} --epsilon-profile {epsilon_profile}",
+      "name": "revision2_plot_propose_urban_step20_{num_vehicles}_{encoder}_{epsilon_profile}",
+      "command": "python3 plot_evaluation.py --agents SPS IPMI Propose --method {methods} --scenario urban --step 20 --num-vehicles {num_vehicles} --encoder {encoder} --epsilon-profile {epsilon_profile}",
       "matrix": {
         "num_vehicles": [
           200,

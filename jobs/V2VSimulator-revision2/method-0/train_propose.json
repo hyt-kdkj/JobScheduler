@@ -12,8 +12,7 @@
           "urban"
         ],
         "step": [
-          20,
-          30
+          20
         ],
         "encoder": [
           "Transformer"
