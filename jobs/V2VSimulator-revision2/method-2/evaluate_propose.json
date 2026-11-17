@@ -4,8 +4,8 @@
   },
   "jobs": [
     {
-      "name": "revision2_eval_propose_method2_highway_{step}_{num_vehicles}_{encoder}_initial-0.5_prrdiff3_packedv4_T05",
-      "command": "python3 evaluate_methods.py --agents Propose --method 2 --scenario highway --step {step} --num-vehicles {num_vehicles} --encoder {encoder} --epsilon-profile initial-0.5 --mode safe --option A --xla off --model highway:120 --load-slot 199999 --reward-type packet-prr-difference-reward3",
+      "name": "revision2_eval_propose_method2_highway_{step}_{num_vehicles}_{encoder}_initial-0.5_prrdiff3_packedv4_u250k1_T05",
+      "command": "python3 evaluate_methods.py --agents Propose --method 2 --scenario highway --step {step} --num-vehicles {num_vehicles} --encoder {encoder} --epsilon-profile initial-0.5 --mode safe --option A --xla off --model highway:120 --load-slot 249999 --reward-type packet-prr-difference-reward3",
       "matrix": {
         "step": [
           20
@@ -20,8 +20,8 @@
       }
     },
     {
-      "name": "revision2_eval_propose_method2_urban_{step}_{num_vehicles}_{encoder}_initial-0.5_prrdiff3_packedv4_T05",
-      "command": "python3 evaluate_methods.py --agents Propose --method 2 --scenario urban --step {step} --num-vehicles {num_vehicles} --encoder {encoder} --epsilon-profile initial-0.5 --mode safe --option A --xla off --model urban:200 --load-slot 199999 --reward-type packet-prr-difference-reward3",
+      "name": "revision2_eval_propose_method2_urban_{step}_{num_vehicles}_{encoder}_initial-0.5_prrdiff3_packedv4_u250k1_T05",
+      "command": "python3 evaluate_methods.py --agents Propose --method 2 --scenario urban --step {step} --num-vehicles {num_vehicles} --encoder {encoder} --epsilon-profile initial-0.5 --mode safe --option A --xla off --model urban:200 --load-slot 249999 --reward-type packet-prr-difference-reward3",
       "matrix": {
         "step": [
           20
