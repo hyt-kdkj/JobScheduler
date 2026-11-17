@@ -11,7 +11,8 @@
       "command": "python3 plot_evaluation.py --agents SPS IPMI Propose --method {methods} --scenario highway --step 20 --num-vehicles {num_vehicles} --analysis-only --encoder {encoder} --epsilon-profile {epsilon_profile}",
       "matrix": {
         "num_vehicles": [
-          120
+          120,
+          360
         ],
         "encoder": [
           "Transformer"
@@ -26,7 +27,8 @@
       "command": "python3 plot_evaluation.py --agents SPS IPMI Propose --method {methods} --scenario urban --step 20 --num-vehicles {num_vehicles} --analysis-only --encoder {encoder} --epsilon-profile {epsilon_profile}",
       "matrix": {
         "num_vehicles": [
-          200
+          200,
+          500
         ],
         "encoder": [
           "Transformer"

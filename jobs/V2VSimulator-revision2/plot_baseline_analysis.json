@@ -8,7 +8,8 @@
       "command": "python3 plot_evaluation.py --agents SPS IPMI --scenario highway --num-vehicles {num_vehicles} --analysis-only",
       "matrix": {
         "num_vehicles": [
-          120
+          120,
+          360
         ]
       }
     },
@@ -17,7 +18,8 @@
       "command": "python3 plot_evaluation.py --agents SPS IPMI --scenario urban --num-vehicles {num_vehicles} --analysis-only",
       "matrix": {
         "num_vehicles": [
-          200
+          200,
+          500
         ]
       }
     }

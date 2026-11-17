@@ -2,7 +2,7 @@
 
 ジョブ定義は `jobs/V2VSimulator/`、`jobs/V2VSimulator-revision/`、`jobs/V2VSimulator-revision2/` に分けています。`JobScheduler/` 内で実行します。
 
-revision2用は[revision2のジョブ定義](V2VSimulator-revision2/README.md)を参照してください。現行method 0/1/2用の全14バッチを用意し、履歴長を全て20に固定しています。
+revision2用は[revision2のジョブ定義](V2VSimulator-revision2/README.md)を参照してください。現行method 0/1/2用の全15バッチを用意し、履歴長を全て20に固定しています。
 
 各JSONの`defaults.project`が実行対象を指定します。revision2は新method 0/1/2で、全バッチの履歴長を20に固定しています。method 1/2はrevision2内のmethod 0モデルを参照します。既存revisionのバッチは変更していません。以下の旧Transformer・LSTMの説明はV2VSimulator向けです。
 

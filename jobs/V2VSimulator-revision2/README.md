@@ -14,8 +14,9 @@ method 1/2は同じmethod 0モデルを参照します。各`train_propose.json`
 総学習期間は200,000 step、最終checkpointはslot 199999です。学習開始10,000 step、40 stepごとに2更新、target同期・学習ログ1,000 step、replay 5,000 stepです。履歴長は全バッチで`--step 20`に固定しています。観測は1 ms間隔です。通常評価はwarmup 10000 step・評価100000 step・seed 10001〜10010の10種類、詳細解析はwarmup 10000 step・評価100000 step・seed 10000です。1エピソードは1000 stepの連続集計です。旧20 msモデルは互換性がないため再学習が必要です。履歴長・Encoder・シナリオ・台数・学習ε profile・モデル参照先・checkpointは各JSONを参照してください。
 
 共通の`evaluate_baseline.json`・`evaluate_baseline_analysis.json`はSPS/IPMI用です。
-`plot.json`・`plot_analysis.json`はmethod 0/1/2を比較します。比較対象は`parameters.methods`で指定します。
-QV測定の専用バッチは削除しました。現在は全14バッチです。
+評価・描画はhighway 120・360台とurban 200・500台の4交通条件です。360台・500台のPropose評価には、それぞれhighway 120台・urban 200台で学習したモデルを使用します。
+`plot.json`・`plot_analysis.json`はmethod 0/1/2を比較し、`plot_baseline_analysis.json`はSPS/IPMIを描画します。比較対象は`parameters.methods`で指定します。
+QV測定の専用バッチは削除しました。現在は全15バッチです。
 
 ```bash
 # JobScheduler内で実行。展開確認だけで登録・SSH接続は行いません。
