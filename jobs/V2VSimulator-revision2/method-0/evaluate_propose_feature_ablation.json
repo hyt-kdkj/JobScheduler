@@ -4,8 +4,8 @@
   },
   "jobs": [
     {
-      "name": "revision2_feature_ablation_propose_method0_highway_{step}_{num_vehicles}_{encoder}_{epsilon_profile}_prrdiff3_packedv4_u250k1_T025",
-      "command": "python3 evaluate_feature_ablation.py --method 0 --agents Propose --scenario highway --step {step} --num-vehicles {num_vehicles} --model highway:120 --analysis-only --encoder {encoder} --epsilon-profile {epsilon_profile} --load-slot 249999 --reward-type packet-prr-difference-reward3 --q-temperature 0.25",
+      "name": "revision2_feature_ablation_propose_method0_highway_{step}_{num_vehicles}_{encoder}_{epsilon_profile}_expprrdiff3_d300_packedv4_u250k1_T025",
+      "command": "python3 evaluate_feature_ablation.py --method 0 --agents Propose --scenario highway --step {step} --num-vehicles {num_vehicles} --model highway:120 --analysis-only --encoder {encoder} --epsilon-profile {epsilon_profile} --load-slot 249999 --reward-type exp-distance-packet-prr-difference-reward3 --q-temperature 0.25",
       "matrix": {
         "step": [
           20
@@ -22,8 +22,8 @@
       }
     },
     {
-      "name": "revision2_feature_ablation_propose_method0_urban_{step}_{num_vehicles}_{encoder}_{epsilon_profile}_prrdiff3_packedv4_u250k1_T025",
-      "command": "python3 evaluate_feature_ablation.py --method 0 --agents Propose --scenario urban --step {step} --num-vehicles {num_vehicles} --model urban:200 --analysis-only --encoder {encoder} --epsilon-profile {epsilon_profile} --load-slot 249999 --reward-type packet-prr-difference-reward3 --q-temperature 0.25",
+      "name": "revision2_feature_ablation_propose_method0_urban_{step}_{num_vehicles}_{encoder}_{epsilon_profile}_expprrdiff3_d300_packedv4_u250k1_T025",
+      "command": "python3 evaluate_feature_ablation.py --method 0 --agents Propose --scenario urban --step {step} --num-vehicles {num_vehicles} --model urban:200 --analysis-only --encoder {encoder} --epsilon-profile {epsilon_profile} --load-slot 249999 --reward-type exp-distance-packet-prr-difference-reward3 --q-temperature 0.25",
       "matrix": {
         "step": [
           20
