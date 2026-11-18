@@ -11,8 +11,7 @@
           20
         ],
         "num_vehicles": [
-          120,
-          360
+          120
         ],
         "encoder": [
           "Transformer"
@@ -27,8 +26,7 @@
           20
         ],
         "num_vehicles": [
-          200,
-          500
+          200
         ],
         "encoder": [
           "Transformer"

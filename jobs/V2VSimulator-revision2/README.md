@@ -16,7 +16,7 @@ method 1/2は同じmethod 0モデルを参照します。各`train_propose.json`
 εはinitial-0.5で0.5を400更新まで保持し、2000更新まで線形に0.02へ減衰（initial-0.3も選択可）。学習率は1e-4を1000更新まで保持し、2200更新までcosineで5e-5へ減衰します。未更新の区間では進みません。250,000 stepで通常2400更新、εの減衰は約50k–210k step、学習率は約110k–230k stepです。
 
 共通の`evaluate_baseline.json`・`evaluate_baseline_analysis.json`はSPS/IPMI用です。
-評価・描画はhighway 120・360台とurban 200・500台の4交通条件です。360台・500台のPropose評価には、それぞれhighway 120台・urban 200台で学習したモデルを使用します。
+評価・描画は当面highway 120台とurban 200台を対象とし、highway 360台とurban 500台はバッチから外しています。
 `plot.json`・`plot_analysis.json`はmethod 0/1/2を比較し、`plot_baseline_analysis.json`はSPS/IPMIを描画します。比較対象は`parameters.methods`で指定します。
 QV測定の専用バッチは削除しました。現在は全15バッチです。
 
@@ -34,6 +34,6 @@ revision2の現行仕様は[Methods.md](../../../V2VSimulator-revision2/markdown
 
 ## 詳細解析の並列実行
 
-詳細解析の4バッチ（共通baselineとmethod 0/1/2）は、4交通条件×5方式＝20ジョブへ展開する。SPSとIPMIも独立したジョブとし、既存の各サーバー最大2ジョブ・1 GPU最大2ジョブの枠へ割り当てる。プロセス内のBLAS/OpenMPは1 thread、TensorFlowはintra-op 2・inter-op 1に制限し、複数プロセスでCPU threadが増えすぎるのを防ぐ。同じ測定を重複投入しない。
+詳細解析の4バッチ（共通baselineとmethod 0/1/2）は、2交通条件×5方式＝10ジョブへ展開する。SPSとIPMIも独立したジョブとし、既存の各サーバー最大2ジョブ・1 GPU最大2ジョブの枠へ割り当てる。プロセス内のBLAS/OpenMPは1 thread、TensorFlowはintra-op 2・inter-op 1に制限し、複数プロセスでCPU threadが増えすぎるのを防ぐ。同じ測定を重複投入しない。
 
 各バッチを`submit-batch ... --queue-only`で登録し、`python3 scheduler.py dispatch`で空き枠へ割り当てる。登録は実行対象を増やす操作なので、内容確認には従来どおり`--dry-run`を使う。共有GPUやCPUの競合により短縮率は変わる。全体の同時実行上限と他プロジェクトの設定は変更していない。
