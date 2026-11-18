@@ -1,6 +1,6 @@
 # V2VSimulator-revision2 のジョブ定義
 
-2026-11-17更新：Proposeの既定報酬は`packet-prr-difference-reward3`（自送信の期待PRR−3×他パケットのPRR損失の和、各パケットの受信対象数で正規化、固定÷10なし）です。候補＋現在資源のNN、17枠の周辺要約、softmax温度0.5、協調Q低下予算2.5を維持し、CPU集計とReplay準備の高速化を有効にします。学習は250,000 step、最終slot249999です。εと学習率は実optimizer更新回数に基づいて減衰します。ジョブ名に`u250k1`、モデル保存名に`u250k1`を付け、旧scheduleのモデルと区別します。通常50,000 step×15 seed、詳細100,000 step、通信warmupはHighway 10,000／Urban 20,000 step、method 1/2の学習参照先method 0は維持します。バッチ更新はジョブ投入を行いません。
+2026-11-18更新：Proposeの既定報酬は`packet-prr-difference-reward3`（自送信の期待PRR−3×他パケットのPRR損失の和、各パケットの受信対象数で正規化、固定÷10なし）です。候補＋現在資源のNN、17枠の周辺要約、評価softmax温度0.25（学習時0.5）、協調Q低下予算2.5を維持し、CPU集計とReplay準備の高速化を有効にします。学習は250,000 step、最終slot249999です。εと学習率は実optimizer更新回数に基づいて減衰します。ジョブ名に`u250k1`、モデル保存名に`u250k1`を付け、旧scheduleのモデルと区別します。通常50,000 step×15 seed、詳細100,000 step、通信warmupはHighway 10,000／Urban 20,000 step、method 1/2の学習参照先method 0は維持します。バッチ更新はジョブ投入を行いません。
 
 全JSONの`defaults.project`は`V2VSimulator-revision2`です。現行methodは0・1・2です。
 
@@ -37,3 +37,5 @@ revision2の現行仕様は[Methods.md](../../../V2VSimulator-revision2/markdown
 詳細解析の4バッチ（共通baselineとmethod 0/1/2）は、2交通条件×5方式＝10ジョブへ展開する。SPSとIPMIも独立したジョブとし、既存の各サーバー最大2ジョブ・1 GPU最大2ジョブの枠へ割り当てる。プロセス内のBLAS/OpenMPは1 thread、TensorFlowはintra-op 2・inter-op 1に制限し、複数プロセスでCPU threadが増えすぎるのを防ぐ。同じ測定を重複投入しない。
 
 各バッチを`submit-batch ... --queue-only`で登録し、`python3 scheduler.py dispatch`で空き枠へ割り当てる。登録は実行対象を増やす操作なので、内容確認には従来どおり`--dry-run`を使う。共有GPUやCPUの競合により短縮率は変わる。全体の同時実行上限と他プロジェクトの設定は変更していない。
+
+2026-11-18：評価コマンドへ`--q-temperature 0.25`を明示し、評価・描画ジョブ名を`T025`へ変更。学習ジョブは温度0.5・既存モデル名のまま。`--q-temperature 0.5`では従来の結果ディレクトリーを参照し、0.25は`_qtemp0.25`へ分離する。ジョブ投入・実行先への同期は行わない。
