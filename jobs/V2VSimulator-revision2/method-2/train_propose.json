@@ -4,7 +4,7 @@
   },
   "jobs": [
     {
-      "name": "revision2_train_base_method0_for_method2_highway_{step}_{encoder}_initial-0.5_expprrdiff3_d300_decisionhist2_100ms_packedv4_u250k1_T05",
+      "name": "revision2_train_base_method0_for_method2_highway_{step}_{encoder}_initial-0.5_expprrdiff3_d300_decisionhist2_100ms_rxrel1_packedv4_u250k1_T05",
       "command": "python3 train_propose.py --method 0 --scenario highway --num-vehicles 120 --step {step} --encoder {encoder} --epsilon-profile initial-0.5 --mode safe --option A --xla off --reward-type exp-distance-packet-prr-difference-reward3",
       "matrix": {
         "step": [
@@ -16,7 +16,7 @@
       }
     },
     {
-      "name": "revision2_train_base_method0_for_method2_urban_{step}_{encoder}_initial-0.5_expprrdiff3_d300_decisionhist2_100ms_packedv4_u250k1_T05",
+      "name": "revision2_train_base_method0_for_method2_urban_{step}_{encoder}_initial-0.5_expprrdiff3_d300_decisionhist2_100ms_rxrel1_packedv4_u250k1_T05",
       "command": "python3 train_propose.py --method 0 --scenario urban --num-vehicles 200 --step {step} --encoder {encoder} --epsilon-profile initial-0.5 --mode safe --option A --xla off --reward-type exp-distance-packet-prr-difference-reward3",
       "matrix": {
         "step": [

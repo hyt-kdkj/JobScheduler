@@ -4,7 +4,7 @@
   },
   "jobs": [
     {
-      "name": "revision2_train_propose_method0_{scenario}_{step}_{encoder}_{epsilon_profile}_expprrdiff3_d300_decisionhist2_100ms_packedv4_u250k1_T05",
+      "name": "revision2_train_propose_method0_{scenario}_{step}_{encoder}_{epsilon_profile}_expprrdiff3_d300_decisionhist2_100ms_rxrel1_packedv4_u250k1_T05",
       "command": "python3 train_propose.py --method 0 --scenario {scenario} --step {step} --encoder {encoder} --epsilon-profile {epsilon_profile} --reward-type exp-distance-packet-prr-difference-reward3",
       "matrix": {
         "scenario": [
