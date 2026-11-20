@@ -9,8 +9,8 @@
 ```bash
 cd ~/workspace/JobScheduler
 
-# 一括投入：highway / urban × step 10〜80 の16件
-python3 scheduler.py submit-batch jobs/V2VSimulator/train_transformer.json
+# method 0 の学習を一括投入（highway / urban の2件）
+python3 scheduler.py submit-batch jobs/V2VSimulator/method-0/train_propose.json
 
 # 状態を確認（新しいジョブは開始しない）
 python3 scheduler.py status
@@ -30,64 +30,23 @@ python3 scheduler.py logs --running --lines 1000
 
 ```bash
 # 内容確認だけ。登録・SSH 接続なし
-python3 scheduler.py submit-batch jobs/V2VSimulator/train_lstm.json --dry-run
+python3 scheduler.py submit-batch jobs/V2VSimulator/method-0/train_propose.json --dry-run
 
 # ローカルのキューに登録だけ。次の dispatch で共有・投入される
-python3 scheduler.py submit-batch jobs/V2VSimulator/train_lstm.json --queue-only
+python3 scheduler.py submit-batch jobs/V2VSimulator/method-0/train_propose.json --queue-only
 
 # 1件だけ投入
-python3 scheduler.py submit --name highway_4_30 \
-  'python3 train_transformer.py --scenario highway --method 4 --step 30'
+python3 scheduler.py submit --name highway_propose_step20 \
+  'python3 train_propose.py --scenario highway --method 0 --step 20'
 ```
 
 `--queue-only` でも、次の定期実行では投入対象になります。
 
-### V2VSimulator-revision を使う
+### V2VSimulator のジョブ定義
 
-既定のプロジェクトは `V2VSimulator` です。`--project V2VSimulator-revision` を指定すると、SSH 先の `~/workspace/V2VSimulator-revision` を使って実行します。
+現行バッチは [jobs/V2VSimulator/](jobs/V2VSimulator/README.md) にあります。実行プロジェクトは `V2VSimulator` で、SSH先の `~/workspace/V2VSimulator` をコンテナ内の `/workspace/V2VSimulator` にマウントします。ソースやモデルは各SSH先で参照できるように配置してください。
 
-```bash
-# V2VSimulator-revision 用のテンプレート作成・GPU 確認
-python3 scheduler.py gpus --project V2VSimulator-revision
-
-# 1件を投入
-python3 scheduler.py submit --project V2VSimulator-revision --name revision_train \
-  'python3 train_propose.py --scenario highway --step 30'
-
-# 既存のバッチ定義を V2VSimulator-revision で実行する場合
-python3 scheduler.py submit-batch jobs/V2VSimulator-revision/method-0/train_propose.json --dry-run
-python3 scheduler.py submit-batch jobs/V2VSimulator-revision/method-0/train_propose.json
-
-# 両プロジェクトの待機ジョブを処理・一覧表示
-python3 scheduler.py dispatch
-python3 scheduler.py status
-
-# V2VSimulator-revision 用のテンプレートを一括停止する場合
-python3 stop_containers.py --container v2vsimulator-revision-v2v-dev-1
-```
-
-Propose の時間 Encoder はコマンドの `--encoder no|LSTM|Transformer` で指定します。既定は `Transformer` です。`jobs/V2VSimulator-revision/*propose*.json` の `matrix.encoder` も既定は `["Transformer"]` とし、比較するときは `["no", "LSTM", "Transformer"]` に変更できます。ジョブ名にも Encoder を含めて区別します。
-
-
-各 SSH 先に `~/workspace/V2VSimulator-revision` とその `docker-shell.sh` を用意してください。ソースコードの自動転送は行いません。テンプレートは `v2vsimulator-revision-v2v-dev-1` で、なければそのプロジェクトの起動スクリプトで作成します。コンテナ内の作業先は、両プロジェクトとも `/workspace/V2VSimulator/Simulator` ですが、マウントするホスト側のソースはそれぞれ異なります。
-
-プロジェクトごとのコンテナ名・作業先・起動スクリプトは `hosts.json` の `projects` に定義しています。新規ジョブは投入時の環境設定を保存し、共有キュー経由の別 PC や定期実行でも同じ環境で起動します。GPU の予約枠と VRAM はプロジェクト間で共通管理します。`status` の `PROJECT` 列で対象を確認できます。対応前に登録したジョブの列は `-` と表示され、従来の実行設定を使います。
-
-バッチ JSON の `defaults` または各ジョブにも `"project": "V2VSimulator-revision"` を指定できます。優先順位は、コマンドの `--project` → 各ジョブの `project` → `defaults.project` → `hosts.json` の `default_project` です。
-
-### V2VSimulator-revision2 を使う
-
-`hosts.json`の`projects`に`V2VSimulator-revision2`を追加しています。SSH先の`~/workspace/V2VSimulator-revision2/docker-shell.sh`を使い、テンプレートコンテナは`v2vsimulator-revision2-v2v-dev-1`です。コンテナ内の作業先は`/workspace/V2VSimulator/Simulator`です。
-
-```bash
-# revision2専用の学習バッチを確認（ジョブ登録・SSH接続なし）
-python3 scheduler.py submit-batch jobs/V2VSimulator-revision2/method-0/train_propose.json --dry-run
-
-# 既存のバッチをrevision2へ切り替えて確認する場合
-python3 scheduler.py submit-batch jobs/V2VSimulator-revision/method-0/train_propose.json --project V2VSimulator-revision2 --dry-run
-```
-
-revision2専用の全14バッチと使い方は[ジョブ定義](jobs/V2VSimulator-revision2/README.md)を参照してください。専用バッチのジョブ名には`revision2_`を付けています。各SSH先にrevision2のソースと必要なモデルを配置してください。投入するときは`--dry-run`を外します。
+バッチ JSON の `defaults` または各ジョブに実行プロジェクトを指定できます。優先順位はコマンドの `--project` → 各ジョブの `project` → `defaults.project` → `hosts.json` の `default_project` です。ジョブ登録時の環境設定は共有キューにも保存され、別PCや定期実行でも使われます。
 
 ### ホストのドライバを変更せず GPU 環境を修復する
 
@@ -103,7 +62,7 @@ python3 prepare_gpu_environment.py --install-driver-version 580.173.02
 
 互換ライブラリは NVIDIA 公式パッケージの SHA-256 を検証してから `~/workspace/.job-scheduler/nvidia-driver-580.173.02/lib/` に展開します。ホストのパッケージやドライバは変更しません。修正済みの起動スクリプトは、稼働中のカーネルドライバと一致するこのディレクトリがあれば、読み取り専用でコンテナにマウントします。対応する配布パッケージを確認済みのバージョンだけを指定できます。
 
-次の `gpus --project V2VSimulator-revision` は停止中のテンプレートにも起動スクリプトを実行し、現在のデバイスとマウント設定を反映します。コンテナが再作成された場合、次のジョブで実行用イメージの初回作成が発生することがあります。
+次の `gpus --project V2VSimulator` は停止中のテンプレートにも起動スクリプトを実行し、現在のデバイスとマウント設定を反映します。コンテナが再作成された場合、次のジョブで実行用イメージの初回作成が発生することがあります。
 
 ### 状態・ログ・キャンセル
 
@@ -156,8 +115,8 @@ python3 prepare_gpu_environment.py --install-driver-version 580.173.02
 {
   "jobs": [
     {
-      "name": "{scenario}_4_{step}",
-      "command": "python3 train_transformer.py --scenario {scenario} --method 4 --step {step}",
+      "name": "{scenario}_propose_{step}",
+      "command": "python3 train_propose.py --scenario {scenario} --method 0 --step {step}",
       "matrix": {
         "scenario": ["highway", "urban"],
         "step": [30, 40, 50, 60, 70, 80]
@@ -179,7 +138,6 @@ python3 prepare_gpu_environment.py --install-driver-version 580.173.02
 - ローカル：Python 3.9 以降と SSH。`hosts.json` の `glockenspiel`、`marimba`、`xylophone0`、`xylophone1` にパスワード入力なしで接続できること。
 - 各サーバー：Docker、稼働する NVIDIA ドライバ、tmux、Python 3.9 以降。
 - V2VSimulator 本体：サーバー側の SAN 上の `~/workspace/V2VSimulator` に配置。ローカルからの自動転送や Git pull は行いません。
-- V2VSimulator-revision を使う場合：同様にサーバー側の `~/workspace/V2VSimulator-revision` に配置。
 
 使用する各サーバーでテンプレート用コンテナを準備します。
 
@@ -193,7 +151,7 @@ exit
 python3 scheduler.py gpus
 ```
 
-既定のテンプレートは `v2vsimulator-v2v-dev-1`、作業先は `/workspace/V2VSimulator/Simulator` です。変更する場合は `hosts.json` を編集します。`gpus` やジョブ投入時にテンプレートが存在しなければ、SSH 先の `~/workspace/V2VSimulator/docker-shell.sh start` を自動実行して作成・起動します。既存イメージがあれば再ビルドしません。初回の環境準備は最大30分待機します。停止済みなら `docker start` で再利用します。接続・環境準備・GPU 確認に失敗したサーバーは投入先から外します。
+既定のテンプレートは `v2vsimulator-v2v-dev-1`、作業先は `/workspace/V2VSimulator/Simulator` です。変更する場合は `hosts.json` を編集します。`gpus` やジョブ投入時にテンプレートが存在しなければ、SSH 先の `~/workspace/V2VSimulator/docker-shell.sh start` を自動実行して作成・起動します。既存イメージがあれば再ビルドしません。初回の環境準備は最大30分待機します。停止済みの場合も設定した起動スクリプトで現在のGPU設定を反映します。接続・環境準備・GPU 確認に失敗したサーバーは投入先から外します。
 
 起動スクリプトの場所が異なる場合は、`hosts.json` の共通設定またはホスト設定に `"template_start_script": "~/workspace/V2VSimulator/docker-shell.sh"` を指定してください。
 

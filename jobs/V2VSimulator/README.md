@@ -1,45 +1,21 @@
-# V2VSimulator-revision2 のジョブ定義
+# V2VSimulator のジョブ定義
 
-2026-11-18更新：Proposeの既定報酬は`exp-distance-packet-prr-difference-reward3`（300 m以内をexp(-d/300)で重み付けし、各パケットの重み合計で正規化。自送信utility−3×他パケットのharm、固定÷10なし）です。候補＋現在資源のNN、17枠の周辺要約、評価softmax温度0.25（学習時0.5）、協調Q低下予算2.5を維持し、CPU集計とReplay準備の高速化を有効にします。学習は250,000 step、最終slot249999です。εと学習率は実optimizer更新回数に基づいて減衰します。ジョブ名に`u250k1`、モデル保存名に`u250k1`を付け、旧scheduleのモデルと区別します。通常50,000 step×15 seed、詳細100,000 step、通信warmupはHighway 10,000／Urban 20,000 step、method 1/2の学習参照先method 0は維持します。バッチ更新はジョブ投入を行いません。
+全11バッチの実行プロジェクトは `V2VSimulator` です。各SSH先で `~/workspace/V2VSimulator` のソースと必要なモデルを参照します。
 
-全JSONの`defaults.project`は`V2VSimulator-revision2`です。現行methodは0・1・2です。
-
-| ディレクトリ | 内容 |
+| ジョブ定義 | 内容 |
 |---|---|
-| `method-0/` | 基底モデルの学習・通常評価・詳細解析・特徴量比較 |
-| `method-1/` | 旧method 11：累積確率95%・最大8候補の予告、単一移動元、移動上限10ポイント |
-| `method-2/` | 旧method 15：同じ予告、最大4移動元、移動総量上限20ポイント |
+| `method-0/train_propose.json` | Highway・UrbanのPropose学習 |
+| `method-0/evaluate_propose*.json` | Proposeの通常評価、詳細解析、特徴量比較 |
+| `evaluate_baseline_analysis_*.json` | 密度別のSPS・IPMI詳細解析 |
+| `plot.json`・`plot_analysis_*.json` | 通常評価・密度別詳細解析の比較図 |
 
-method 1/2は同じmethod 0モデルを参照します。各`train_propose.json`も`--method 0`を指定するため、学習は一つのバッチだけを使います。
-総学習期間は250,000 step、最終checkpointはslot 249999です。学習開始10,000 step、100 stepごとに1更新、target同期2,000 step・学習ログ1,000 step、replay 5,000 stepです。履歴長は全バッチで`--step 20`に固定しています。観測は1 ms間隔です。通常評価は評価50000 step・seed 10001〜10015の15種類、詳細解析は評価100000 step・seed 10000。通信warmupは両モードともHighway 10000／Urban 20000 stepです。1エピソードは1000 stepの連続集計です。旧20 msモデルは互換性がないため再学習が必要です。履歴長・Encoder・シナリオ・台数・学習ε profile・モデル参照先・checkpointは各JSONを参照してください。
-
-εはinitial-0.5で0.5を400更新まで保持し、2000更新まで線形に0.02へ減衰（initial-0.3も選択可）。学習率は1e-4を1000更新まで保持し、2200更新までcosineで5e-5へ減衰します。未更新の区間では進みません。250,000 stepで通常2400更新、εの減衰は約50k–210k step、学習率は約110k–230k stepです。
-
-共通の`evaluate_baseline.json`・`evaluate_baseline_analysis.json`はSPS/IPMI用です。
-評価・描画は当面highway 120台とurban 200台を対象とし、highway 360台とurban 500台はバッチから外しています。
-`plot.json`・`plot_analysis.json`はmethod 0/1/2を比較し、`plot_baseline_analysis.json`はSPS/IPMIを描画します。比較対象は`parameters.methods`で指定します。
-QV測定の専用バッチは削除しました。現在は全15バッチです。
+ProposeはCAM履歴、履歴長20、報酬 `exp-distance-packet-prr-difference-reward5` を使用します。学習は250,000 stepで、評価・描画には現行モデルのslot 249999が必要です。密度別解析のモデルはHighway 120台・Urban 200台の学習結果を参照します。評価と描画の温度は0.25です。
 
 ```bash
-# JobScheduler内で実行。展開確認だけで登録・SSH接続は行いません。
-python3 scheduler.py submit-batch jobs/V2VSimulator-revision2/method-0/train_propose.json --dry-run
-python3 scheduler.py submit-batch jobs/V2VSimulator-revision2/method-1/evaluate_propose.json --dry-run
-python3 scheduler.py submit-batch jobs/V2VSimulator-revision2/method-2/evaluate_propose_analysis.json --dry-run
-python3 scheduler.py submit-batch jobs/V2VSimulator-revision2/plot_analysis.json --dry-run
+# JobScheduler内で実行
+python3 scheduler.py submit-batch jobs/V2VSimulator/method-0/train_propose.json --dry-run
+python3 scheduler.py submit-batch jobs/V2VSimulator/method-0/evaluate_propose.json --dry-run
+python3 scheduler.py submit-batch jobs/V2VSimulator/plot_analysis_low_density.json --dry-run
 ```
 
-投入するときは`--dry-run`を外します。バッチ間の依存関係は自動登録されません。
-各SSH先に`~/workspace/V2VSimulator-revision2`と必要なモデルを配置してください。ソース・モデルは自動転送されません。
-revision2の現行仕様は[Methods.md](../../../V2VSimulator-revision2/markdown/Methods.md)を参照してください。過去のmethod番号と現行の番号を混同しないでください。
-
-## 詳細解析の並列実行
-
-詳細解析の4バッチ（共通baselineとmethod 0/1/2）は、2交通条件×5方式＝10ジョブへ展開する。SPSとIPMIも独立したジョブとし、既存の各サーバー最大2ジョブ・1 GPU最大2ジョブの枠へ割り当てる。プロセス内のBLAS/OpenMPは1 thread、TensorFlowはintra-op 2・inter-op 1に制限し、複数プロセスでCPU threadが増えすぎるのを防ぐ。同じ測定を重複投入しない。
-
-各バッチを`submit-batch ... --queue-only`で登録し、`python3 scheduler.py dispatch`で空き枠へ割り当てる。登録は実行対象を増やす操作なので、内容確認には従来どおり`--dry-run`を使う。共有GPUやCPUの競合により短縮率は変わる。全体の同時実行上限と他プロジェクトの設定は変更していない。
-
-2026-11-18：評価コマンドへ`--q-temperature 0.25`を明示し、評価・描画ジョブ名を`T025`へ変更。学習ジョブは温度0.5・既存モデル名のまま。`--q-temperature 0.5`では従来の結果ディレクトリーを参照し、0.25は`_qtemp0.25`へ分離する。ジョブ投入・実行先への同期は行わない。
-
-2026-11-18：指数距離重み付き報酬を既定化。提案手法の全バッチで新報酬を明示し、ジョブ名に`expprrdiff3_d300`を付けた。旧報酬とはモデル・結果の保存先を分離するため、評価前に新報酬でmethod 0を再学習する。学習250,000 step、学習温度0.5／評価温度0.25、既存の台数・シナリオ選択は維持する。
-
-2026-11-18：提案手法の履歴は100 ms要約×20個（2000 ms）へ変更。バッチ名の`hist100ms`とモデル条件の`_hist100ms_training`で旧履歴と分離する。新方式でmethod 0を再学習してから、同じ履歴のmethod 0/1/2を評価する。NNの入力数は従来のstep20から増やしていない。
+投入するときは `--dry-run` を外します。バッチ間の依存関係は自動登録されません。各バッチの実行条件はJSONを参照してください。
