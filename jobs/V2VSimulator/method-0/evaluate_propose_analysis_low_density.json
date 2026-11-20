@@ -1,6 +1,6 @@
 {
   "defaults": {
-    "project": "V2VSimulator-revision2"
+    "project": "V2VSimulator"
   },
   "jobs": [
     {
@@ -11,7 +11,7 @@
           20
         ],
         "num_vehicles": [
-          360
+          120
         ],
         "encoder": [
           "Transformer"
@@ -29,7 +29,7 @@
           20
         ],
         "num_vehicles": [
-          500
+          200
         ],
         "encoder": [
           "Transformer"
