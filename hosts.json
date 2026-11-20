@@ -43,6 +43,7 @@
     },
     {
       "ssh": "marimba",
+      "deprioritize": true,
       "excluded_gpu_uuids": [
         "GPU-a333b701-8be1-359d-88ea-25b57b46fba9"
       ]

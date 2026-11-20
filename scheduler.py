@@ -114,6 +114,8 @@ def configuration(path):
     if shared and (not isinstance(shared, dict) or shared.get('host') not in names):
         raise ValueError('shared_queue.host must name a configured SSH host')
     for entry in [cfg] + cfg['hosts']:
+        if 'deprioritize' in entry and not isinstance(entry['deprioritize'], bool):
+            raise ValueError('deprioritize must be a boolean')
         connections = entry.get('max_ssh_connections', cfg.get('max_ssh_connections', 1))
         if not isinstance(connections, int) or isinstance(connections, bool) or connections < 1:
             raise ValueError('max_ssh_connections must be a positive integer')
@@ -205,6 +207,7 @@ def inventory(cfg):
 
 def candidates(cfg, inv, job, host_counts=None):
     host_counts = host_counts or {}
+    deprioritized = {entry['ssh'] for entry in cfg['hosts'] if entry.get('deprioritize', False)}
     limits = {entry['ssh']: entry.get('max_jobs_per_host', cfg.get('max_jobs_per_host'))
               for entry in cfg['hosts']}
     excluded = {entry['ssh']: set(entry.get('excluded_gpu_uuids', cfg.get('excluded_gpu_uuids', [])))
@@ -221,7 +224,8 @@ def candidates(cfg, inv, job, host_counts=None):
                and gpu.get('accepting_jobs', gpu['idle'])
                and gpu.get('available_mib', gpu['total_mib'] - gpu['used_mib']) >= job['min_free_mib']]
     # Stable order for equal GPU models; priority is configurable, not a benchmark.
-    return sorted(options, key=lambda g: (-g['priority'], g['utilization'],
+    return sorted(options, key=lambda g: (g['host'] in deprioritized,
+                                        -g['priority'], g['utilization'],
                                         -g['total_mib'] + g['used_mib'],
                                         g['host'], g['index']))
 
@@ -796,7 +800,8 @@ def main():
     elif args.action == 'gpus':
         for host, data in inventory(project_configuration(
                 cfg, args.project or cfg.get('default_project'))).items():
-            print(host + (f' jobs={data["host_occupied_jobs"]}/{data["host_max_jobs"]}'
+            print(host + (' priority=last' if next(h for h in cfg['hosts'] if h['ssh'] == host).get('deprioritize') else '')
+                  + (f' jobs={data["host_occupied_jobs"]}/{data["host_max_jobs"]}'
                           if data.get('host_max_jobs') is not None else ''))
             if 'error' in data:
                 print('  UNAVAILABLE: ' + data['error'])

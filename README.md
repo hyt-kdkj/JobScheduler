@@ -176,7 +176,7 @@ python3 prepare_gpu_environment.py --install-driver-version 580.173.02
 
 ## 初期設定
 
-- ローカル：Python 3.9 以降と SSH。`hosts.json` の `glockenspiel`、`marimba`、`xylophone0`、`xylophone1`、`xylophone3` にパスワード入力なしで接続できること。
+- ローカル：Python 3.9 以降と SSH。`hosts.json` の `glockenspiel`、`marimba`、`xylophone0`、`xylophone1` にパスワード入力なしで接続できること。
 - 各サーバー：Docker、稼働する NVIDIA ドライバ、tmux、Python 3.9 以降。
 - V2VSimulator 本体：サーバー側の SAN 上の `~/workspace/V2VSimulator` に配置。ローカルからの自動転送や Git pull は行いません。
 - V2VSimulator-revision を使う場合：同様にサーバー側の `~/workspace/V2VSimulator-revision` に配置。
@@ -199,7 +199,7 @@ python3 scheduler.py gpus
 
 ### GPU の割当て
 
-優先順は **RTX 5000 Ada → Quadro RTX 6000 → GTX 1080 Ti → P100**。`hosts.json` で変更できます。
+設定済みホストでの優先順は **glockenspiel（RTX 5000 Ada）→ xylophone0・1（GTX 1080 Ti）→ marimba（Quadro RTX 6000）**。marimba は `deprioritize: true` により他ホストの候補が使えない場合に選びます。上位のGPUに空き枠や必要なVRAMがない場合は、次のGPUを選びます。P100は投入対象から除外しています。順位は `hosts.json` の設定値で、実測ベンチマークではありません。現在 `xylophone3` は `hosts.json` の対象ホストに含まれていません。
 
 1 GPU 最大2ジョブで、起動準備中の予約と外部の GPU 計算プロセスも枠に数えます。投入ごとに使用状況を確認し、必要 VRAM と既定1 GiBの余裕がある場合だけ開始します。`gpus` の `slots` は使用枠、`budget` は追加投入に使える VRAM です。
 
@@ -219,7 +219,7 @@ docker cp ~/.local/share/job-scheduler/driver-libraries/580.173.02/lib \
   v2vsimulator-v2v-dev-1:/opt/nvidia-driver-580.173.02/
 ```
 
-既存の環境イメージは、全ジョブ終了後に対象キャッシュを削除して更新します。ホストの NVIDIA ドライバ自体が動いていない場合は、この対応では解決しません。xylophone3 は RTX 5070 Ti を使用し、ホストのドライバに一致するライブラリをコンテナにマウントします。
+既存の環境イメージは、全ジョブ終了後に対象キャッシュを削除して更新します。ホストの NVIDIA ドライバ自体が動いていない場合は、この対応では解決しません。現在は `xylophone3` を投入対象から外しています。
 
 ## 自動投入（cron）
 

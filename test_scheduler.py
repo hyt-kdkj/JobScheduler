@@ -214,6 +214,42 @@ class SchedulingTest(unittest.TestCase):
         job['min_free_mib'] = 12000
         self.assertEqual(s.candidates(self.cfg, inv, job), [])
 
+    def test_configured_gpu_order_and_p100_exclusion(self):
+        actual = s.configuration(s.HERE / 'hosts.json')
+        self.assertTrue(next(h for h in actual['hosts'] if h['ssh'] == 'marimba')['deprioritize'])
+        cfg = copy.deepcopy(self.cfg)
+        cfg['max_jobs_per_host'] = 2
+        next(h for h in cfg['hosts'] if h['ssh'] == 'marimba')['deprioritize'] = True
+        job = self.job()
+        ada = self.gpu('NVIDIA RTX 5000 Ada Generation', 'glockenspiel',
+                       uuid='GPU-ada', total_mib=32760)
+        quadro = self.gpu('Quadro RTX 6000', 'marimba', uuid='GPU-quadro', total_mib=24576)
+        p100 = self.gpu('Tesla P100-PCIE-16GB', 'marimba', uuid='GPU-another-p100')
+        gtx = self.gpu('NVIDIA GeForce GTX 1080 Ti', 'xylophone0', uuid='GPU-gtx')
+        inv = {'glockenspiel': {'gpus': [ada]}, 'marimba': {'gpus': [p100, quadro]},
+               'xylophone0': {'gpus': [gtx]}}
+        self.assertEqual([g['uuid'] for g in s.candidates(cfg, inv, job)],
+                         ['GPU-ada', 'GPU-gtx', 'GPU-quadro'])
+        self.assertEqual([g['uuid'] for g in s.candidates(cfg, inv, job, {'glockenspiel': 2})],
+                         ['GPU-gtx', 'GPU-quadro'])
+        gtx['accepting_jobs'] = False
+        self.assertEqual([g['uuid'] for g in s.candidates(cfg, inv, job, {'glockenspiel': 2})],
+                         ['GPU-quadro'])
+        gtx['accepting_jobs'] = True
+        gtx['priority'] = 0  # Host preference also wins for unrecognized GPU models.
+        self.assertEqual([g['uuid'] for g in s.candidates(cfg, inv, job, {'glockenspiel': 2})],
+                         ['GPU-gtx', 'GPU-quadro'])
+        job['requested_host'] = 'marimba'
+        self.assertEqual([g['uuid'] for g in s.candidates(cfg, inv, job)], ['GPU-quadro'])
+
+    def test_deprioritize_requires_boolean(self):
+        cfg = copy.deepcopy(self.cfg)
+        cfg['hosts'][0]['deprioritize'] = 'false'
+        path = Path(self.temp.name) / 'hosts.json'
+        path.write_text(json.dumps(cfg))
+        with self.assertRaisesRegex(ValueError, 'deprioritize'):
+            s.configuration(path)
+
     def test_host_limit_is_shared_across_gpus_and_projects(self):
         cfg = dict(self.cfg, max_jobs_per_host=2,
                    hosts=[{'ssh': 'marimba'}, {'ssh': 'xylophone0'}])
