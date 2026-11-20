@@ -9,7 +9,7 @@
 | `evaluate_baseline_analysis_*.json` | 密度別のSPS・IPMI詳細解析 |
 | `plot.json`・`plot_analysis_*.json` | 通常評価・密度別詳細解析の比較図 |
 
-ProposeはCAM履歴、履歴長20、報酬 `exp-distance-packet-prr-difference-reward5` を使用します。学習は250,000 stepで、評価・描画には現行モデルのslot 249999が必要です。密度別解析のモデルはHighway 120台・Urban 200台の学習結果を参照します。評価と描画の温度は0.25です。
+ProposeはCAM履歴、履歴長20、報酬 `exp-distance-packet-prr-difference-reward5` を使用します。全バッチは `--path-layout v2` で短縮レイアウトへ保存します。学習は250,000 step（学習温度0.25）で、評価・描画には現行モデルのslot 249999（`--training-q-temperature 0.25`）が必要です。密度別解析のモデルはHighway 120台・Urban 200台の学習結果を参照します。評価と描画の温度は0.25です。
 
 ```bash
 # JobScheduler内で実行

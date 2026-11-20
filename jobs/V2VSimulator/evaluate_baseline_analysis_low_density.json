@@ -5,7 +5,7 @@
   "jobs": [
     {
       "name": "revision2_eval_{agent}_highway_{num_vehicles}_analysis",
-      "command": "env OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 TF_NUM_INTRAOP_THREADS=2 TF_NUM_INTEROP_THREADS=1 python3 evaluate_methods.py --agents {agent} --step 20 --scenario highway --num-vehicles {num_vehicles} --analysis-only --epsilon-profile initial-0.5",
+      "command": "env OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 TF_NUM_INTRAOP_THREADS=2 TF_NUM_INTEROP_THREADS=1 python3 evaluate_methods.py --path-layout v2 --agents {agent} --step 20 --scenario highway --num-vehicles {num_vehicles} --analysis-only --epsilon-profile initial-0.5",
       "matrix": {
         "num_vehicles": [
           120
@@ -18,7 +18,7 @@
     },
     {
       "name": "revision2_eval_{agent}_urban_{num_vehicles}_analysis",
-      "command": "env OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 TF_NUM_INTRAOP_THREADS=2 TF_NUM_INTEROP_THREADS=1 python3 evaluate_methods.py --agents {agent} --step 20 --scenario urban --num-vehicles {num_vehicles} --analysis-only --epsilon-profile initial-0.5",
+      "command": "env OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 TF_NUM_INTRAOP_THREADS=2 TF_NUM_INTEROP_THREADS=1 python3 evaluate_methods.py --path-layout v2 --agents {agent} --step 20 --scenario urban --num-vehicles {num_vehicles} --analysis-only --epsilon-profile initial-0.5",
       "matrix": {
         "num_vehicles": [
           200
