@@ -362,12 +362,13 @@ def reconcile(cfg, queue):
 
 def dispatch(cfg, queue):
     reconcile(cfg, queue)
-    if not any(j['status'] == 'queued' for j in queue.all()):
-        return
+    # Submissions can arrive after dispatch_once publishes its queue snapshot.
+    # Leave those jobs queued until a later pass has published them on the SAN.
+    shared = cfg.get('shared_queue')
+    waiting = [job for job in queue.all() if job['status'] == 'queued'
+               and (not shared or job.get('published'))]
     inventories = {}
-    for job in queue.all():
-        if job['status'] != 'queued':
-            continue
+    for job in waiting:
         execution_cfg = job_configuration(cfg, job)
         key = json.dumps(execution_cfg['hosts'], sort_keys=True)
         if not execution_cfg['hosts']:

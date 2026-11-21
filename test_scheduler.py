@@ -459,6 +459,35 @@ class SchedulingTest(unittest.TestCase):
             s.refresh_shared(cfg, self.q)
         self.assertFalse(any(statement.startswith('INSERT') for statement in statements))
 
+    def test_dispatch_defers_submission_added_during_shared_publish(self):
+        cfg = dict(self.cfg, shared_queue={'host': 'glockenspiel'}, results_sync=None)
+        other = s.Queue(self.q.directory)
+        job = None
+
+        def publish(cfg, request):
+            nonlocal job
+            if job is None:
+                self.assertEqual(request['jobs'], [])
+                job = s.new_job(cfg, dict(command='echo late submission'))
+                other.add_many([job])
+                return {'jobs': []}
+            self.assertEqual(request['jobs'], [job])
+            return {'jobs': [job]}
+
+        inv = {'xylophone0': {'gpus': [self.gpu()]}}
+        with patch.object(s, 'shared_rpc', side_effect=publish), \
+             patch.object(s, 'inventory', return_value=inv), \
+             patch.object(s, 'remote', return_value={'status': 'reserved'}) as launch, \
+             contextlib.redirect_stdout(io.StringIO()):
+            s.dispatch_once(cfg, self.q)
+            self.assertEqual(self.q.get(job['id']), job)
+            launch.assert_not_called()
+            s.dispatch_once(cfg, self.q)
+
+        launch.assert_called_once()
+        self.assertEqual(launch.call_args.args[1]['id'], job['id'])
+        self.assertEqual(self.q.get(job['id'])['status'], 'reserved')
+
     def test_status_reader_cannot_roll_back_newer_state(self):
         job = self.job()
         stale = copy.deepcopy(job)
