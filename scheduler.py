@@ -329,6 +329,8 @@ def refresh_shared(cfg, queue, publish=False):
         # Result-sync metadata is local to each PC, never shared across clients.
         sync = job.get('result_sync')
         job.update(remote_job, published=True)
+        if job['status'] in TERMINAL:
+            job.pop('connection_error', None)
         if sync:
             job['result_sync'] = sync
         if job != existing.get(job['id']):

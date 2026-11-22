@@ -488,6 +488,16 @@ class SchedulingTest(unittest.TestCase):
         self.assertEqual(launch.call_args.args[1]['id'], job['id'])
         self.assertEqual(self.q.get(job['id'])['status'], 'reserved')
 
+    def test_shared_terminal_status_clears_cached_transport_error(self):
+        job = self.job()
+        self.q.put(dict(job, status='running', host='xylophone0',
+                        connection_error='xylophone0: SSH connection busy; waited 2s'))
+        finished = dict(job, status='succeeded', host='xylophone0', exit_code=0)
+        cfg = dict(self.cfg, shared_queue={'host': 'glockenspiel'})
+        with patch.object(s, 'shared_rpc', return_value={'jobs': [finished]}):
+            s.refresh_shared(cfg, self.q)
+        self.assertEqual(self.q.get(job['id']), dict(finished, published=True))
+
     def test_status_reader_cannot_roll_back_newer_state(self):
         job = self.job()
         stale = copy.deepcopy(job)
