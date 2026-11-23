@@ -135,7 +135,7 @@ python3 prepare_gpu_environment.py --install-driver-version 580.173.02
 
 ## 初期設定
 
-- ローカル：Python 3.9 以降と SSH。`hosts.json` の `glockenspiel`、`marimba`、`xylophone0`、`xylophone1` にパスワード入力なしで接続できること。
+- ローカル：Python 3.9 以降と SSH。`hosts.json` の `glockenspiel`、`xylophone0`、`xylophone1` にパスワード入力なしで接続できること。
 - 各サーバー：Docker、稼働する NVIDIA ドライバ、tmux、Python 3.9 以降。
 - V2VSimulator 本体：サーバー側の SAN 上の `~/workspace/V2VSimulator` に配置。ローカルからの自動転送や Git pull は行いません。
 
@@ -157,13 +157,13 @@ python3 scheduler.py gpus
 
 ### GPU の割当て
 
-設定済みホストでの優先順は **glockenspiel（RTX 5000 Ada）→ xylophone0・1（GTX 1080 Ti）→ marimba（Quadro RTX 6000）**。marimba は `deprioritize: true` により他ホストの候補が使えない場合に選びます。上位のGPUに空き枠や必要なVRAMがない場合は、次のGPUを選びます。P100は投入対象から除外しています。順位は `hosts.json` の設定値で、実測ベンチマークではありません。現在 `xylophone3` は `hosts.json` の対象ホストに含まれていません。
+設定済みホストでの優先順は **glockenspiel（RTX 5000 Ada）→ xylophone0・1（GTX 1080 Ti）**。上位のGPUに空き枠や必要なVRAMがない場合は、次のGPUを選びます。P100は投入対象から除外しています。順位は `hosts.json` の設定値で、実測ベンチマークではありません。`marimba` と `xylophone3` は新規投入の対象外です。
 
 1 GPU 最大2ジョブで、起動準備中の予約と外部の GPU 計算プロセスも枠に数えます。投入ごとに使用状況を確認し、必要 VRAM と既定1 GiBの余裕がある場合だけ開始します。`gpus` の `slots` は使用枠、`budget` は追加投入に使える VRAM です。
 
 `max_jobs_per_gpu` と `gpu_memory_headroom_mib` で上限・余裕を変更できます。必要 VRAM は投入判断用で、実行時の使用量を制限しません。割当ては `CUDA_VISIBLE_DEVICES` で行うため、学習コマンドの `--gpu` は省略するか `auto` にしてください。
 
-`excluded_gpu_names` に指定した文字列を名前に含むGPUと、ホスト設定の `excluded_gpu_uuids` に指定したGPUは新規投入から除外し、`gpus` では `EXCLUDED` と表示します。全ホストでP100を除外し、marimba では Quadro RTX 6000（GPU 1）を使用します。登録済みの待機ジョブにも適用し、実行中のジョブは継続します。
+`excluded_gpu_names` に指定した文字列を名前に含むGPUと、ホスト設定の `excluded_gpu_uuids` に指定したGPUは新規投入から除外し、`gpus` では `EXCLUDED` と表示します。全ホストでP100を除外します。登録済みの待機ジョブにも適用し、実行中のジョブは継続します。
 
 ### ドライバ不一致への対応
 
