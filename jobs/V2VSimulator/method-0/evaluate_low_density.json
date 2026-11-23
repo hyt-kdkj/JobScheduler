@@ -4,6 +4,24 @@
   },
   "jobs": [
     {
+      "name": "revision2_eval_propose_method0_highway_{step}_{num_vehicles}_analysis_{encoder}_{epsilon_profile}_expprrdiff5_d300_camhist3_100ms_packedv4_u250k2_T025",
+      "command": "env OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 TF_NUM_INTRAOP_THREADS=2 TF_NUM_INTEROP_THREADS=1 python3 evaluate_methods.py --method 0 --path-layout v2 --agents Propose --scenario highway --step {step} --num-vehicles {num_vehicles} --analysis-only --encoder {encoder} --epsilon-profile {epsilon_profile} --load-slot 249999 --reward-type exp-distance-packet-prr-difference-reward5 --training-q-temperature 0.25 --q-temperature 0.25 --model highway:120",
+      "matrix": {
+        "step": [
+          20
+        ],
+        "num_vehicles": [
+          120
+        ],
+        "encoder": [
+          "Transformer"
+        ],
+        "epsilon_profile": [
+          "initial-0.5"
+        ]
+      }
+    },
+    {
       "name": "revision2_eval_propose_method0_urban_{step}_{num_vehicles}_analysis_{encoder}_{epsilon_profile}_expprrdiff5_d300_camhist3_100ms_packedv4_u250k2_T025",
       "command": "env OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 TF_NUM_INTRAOP_THREADS=2 TF_NUM_INTEROP_THREADS=1 python3 evaluate_methods.py --method 0 --path-layout v2 --agents Propose --scenario urban --step {step} --num-vehicles {num_vehicles} --analysis-only --encoder {encoder} --epsilon-profile {epsilon_profile} --load-slot 249999 --reward-type exp-distance-packet-prr-difference-reward5 --training-q-temperature 0.25 --q-temperature 0.25 --model urban:200",
       "matrix": {

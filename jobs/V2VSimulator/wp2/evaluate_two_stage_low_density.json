@@ -4,6 +4,47 @@
   },
   "jobs": [
     {
+      "name": "wp2_eval_propose_twostage_h0_unbounded_highway_{step}_{num_vehicles}_{encoder}_{epsilon_profile}_r5_camhist4_T025",
+      "command": "env OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 TF_NUM_INTRAOP_THREADS=2 TF_NUM_INTEROP_THREADS=1 python3 evaluate_methods.py --method 0 --path-layout v2 --agents Propose --scenario highway --step {step} --num-vehicles {num_vehicles} --analysis-only --selection-policy two_stage_softmax --two-stage-hold-margin 0 --encoder {encoder} --epsilon-profile {epsilon_profile} --load-slot 249999 --reward-type exp-distance-packet-prr-difference-reward5 --training-q-temperature 0.25 --q-temperature 0.25 --model highway:120 --decision-input-revision camhist4",
+      "matrix": {
+        "step": [
+          20
+        ],
+        "num_vehicles": [
+          120
+        ],
+        "encoder": [
+          "Transformer"
+        ],
+        "epsilon_profile": [
+          "initial-0.5"
+        ]
+      }
+    },
+    {
+      "name": "wp2_eval_propose_twostage_h0_d{band}_highway_{step}_{num_vehicles}_{encoder}_{epsilon_profile}_r5_camhist4_T025",
+      "command": "env OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 TF_NUM_INTRAOP_THREADS=2 TF_NUM_INTEROP_THREADS=1 python3 evaluate_methods.py --method 0 --path-layout v2 --agents Propose --scenario highway --step {step} --num-vehicles {num_vehicles} --analysis-only --selection-policy two_stage_softmax --two-stage-hold-margin 0 --two-stage-band {band} --encoder {encoder} --epsilon-profile {epsilon_profile} --load-slot 249999 --reward-type exp-distance-packet-prr-difference-reward5 --training-q-temperature 0.25 --q-temperature 0.25 --model highway:120 --decision-input-revision camhist4",
+      "matrix": {
+        "step": [
+          20
+        ],
+        "num_vehicles": [
+          120
+        ],
+        "band": [
+          0.5,
+          1.0,
+          2.0
+        ],
+        "encoder": [
+          "Transformer"
+        ],
+        "epsilon_profile": [
+          "initial-0.5"
+        ]
+      }
+    },
+    {
       "name": "wp2_eval_propose_twostage_h0_unbounded_urban_{step}_{num_vehicles}_{encoder}_{epsilon_profile}_r5_camhist4_T025",
       "command": "env OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 TF_NUM_INTRAOP_THREADS=2 TF_NUM_INTEROP_THREADS=1 python3 evaluate_methods.py --method 0 --path-layout v2 --agents Propose --scenario urban --step {step} --num-vehicles {num_vehicles} --analysis-only --selection-policy two_stage_softmax --two-stage-hold-margin 0 --encoder {encoder} --epsilon-profile {epsilon_profile} --load-slot 249999 --reward-type exp-distance-packet-prr-difference-reward5 --training-q-temperature 0.25 --q-temperature 0.25 --model urban:200 --decision-input-revision camhist4",
       "matrix": {
