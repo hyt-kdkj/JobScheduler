@@ -362,12 +362,59 @@ def reconcile(cfg, queue):
         queue.put(job)
 
 
+def resolve_dependencies(cfg, queue):
+    """Cancel queued jobs whose dependencies failed/cancelled; return ready IDs."""
+    shared = cfg.get('shared_queue')
+    while True:
+        all_jobs = queue.all()
+        by_id = {j['id']: j for j in all_jobs}
+        changed = False
+        for job in all_jobs:
+            if job['status'] != 'queued' or not job.get('depends_on'):
+                continue
+            names = job.get('depends_on_names') or [d[:8] for d in job['depends_on']]
+            for idx, dep_id in enumerate(job['depends_on']):
+                dep = by_id.get(dep_id)
+                if dep is None or dep['status'] in ('failed', 'cancelled'):
+                    label = names[idx] if idx < len(names) else dep_id[:8]
+                    state = dep['status'] if dep is not None else 'missing'
+                    reason = f'Dependency {label} {state}'
+                    if job.get('published') and shared:
+                        try:
+                            current = shared_rpc(cfg, {'action': 'shared_cancel',
+                                                       'id': job['id'], 'error': reason})
+                            apply_result(job, current)
+                        except RuntimeError as exc:
+                            job['connection_error'] = str(exc)
+                            queue.put(job)
+                            break
+                    if job['status'] == 'queued':
+                        job.update(status='cancelled', finished=time.time(),
+                                   exit_code=None, error=reason)
+                    elif not job.get('error'):
+                        job['error'] = reason
+                    queue.put(job)
+                    changed = True
+                    break
+        if not changed:
+            break
+    by_id = {j['id']: j for j in queue.all()}
+    return {
+        j['id'] for j in by_id.values()
+        if j['status'] == 'queued'
+        and all(by_id.get(dep_id, {}).get('status') == 'succeeded'
+                for dep_id in j.get('depends_on', []))
+    }
+
+
 def dispatch(cfg, queue):
     reconcile(cfg, queue)
+    ready_ids = resolve_dependencies(cfg, queue)
     # Submissions can arrive after dispatch_once publishes its queue snapshot.
     # Leave those jobs queued until a later pass has published them on the SAN.
     shared = cfg.get('shared_queue')
     waiting = [job for job in queue.all() if job['status'] == 'queued'
+               and job['id'] in ready_ids
                and (not shared or job.get('published'))]
     inventories = {}
     for job in waiting:
@@ -531,6 +578,9 @@ def show_jobs(jobs, include_cancelled=True):
               f'{job_agents(j):24} '
               f'{j.get("project", "-"):{project_width}} '
               f'{j.get("name") or j["command"]}')
+        if j['status'] == 'queued' and j.get('depends_on'):
+            labels = j.get('depends_on_names') or [d[:8] for d in j['depends_on']]
+            print('  depends_on: ' + ', '.join(labels))
         for key in ('error', 'connection_error', 'cleanup_error', 'template_cleanup_error'):
             if j.get(key):
                 print(f'  {key}: {j[key]}')
@@ -547,7 +597,7 @@ def status_jobs(jobs, include_all=False, now=None):
 
 
 def new_job(cfg, spec):
-    allowed = {'command', 'name', 'host', 'min_free_gb', 'project'}
+    allowed = {'command', 'name', 'host', 'min_free_gb', 'project', 'depends_on', 'depends_on_names'}
     if set(spec) - allowed:
         raise ValueError('Unknown job fields: ' + ', '.join(sorted(set(spec) - allowed)))
     command = spec.get('command')
@@ -561,6 +611,16 @@ def new_job(cfg, spec):
     memory = spec.get('min_free_gb', 2)
     if not isinstance(memory, (float, int)) or not math.isfinite(memory) or memory < 0:
         raise ValueError('min_free_gb must be finite and nonnegative')
+    depends_on = spec.get('depends_on')
+    if depends_on is not None:
+        if (not isinstance(depends_on, list) or
+                any(not isinstance(item, str) or not item.strip() for item in depends_on)):
+            raise ValueError('depends_on must be a list of nonempty strings')
+    depends_on_names = spec.get('depends_on_names')
+    if depends_on_names is not None:
+        if (not isinstance(depends_on_names, list) or
+                any(not isinstance(item, str) or not item.strip() for item in depends_on_names)):
+            raise ValueError('depends_on_names must be a list of nonempty strings')
     project = spec.get('project')
     if project is None:
         project = cfg.get('default_project')
@@ -574,7 +634,55 @@ def new_job(cfg, spec):
                 min_free_mib=math.ceil(memory * 1024), execution=execution)
     if project is not None:
         job['project'] = project
+    if depends_on:
+        job['depends_on'] = list(depends_on)
+        if depends_on_names:
+            job['depends_on_names'] = list(depends_on_names)
     return job
+
+
+def _resolve_batch_dependencies(jobs):
+    by_name = {}
+    for job in jobs:
+        name = job.get('name', '')
+        if name:
+            by_name.setdefault(name, []).append(job)
+    for job in jobs:
+        raw = job.get('depends_on')
+        if not raw:
+            continue
+        dep_ids, dep_names, seen = [], [], set()
+        for dep_name in raw:
+            matches = by_name.get(dep_name, [])
+            if not matches:
+                raise ValueError(f'Unknown dependency in batch: {dep_name}')
+            if len(matches) > 1:
+                raise ValueError(f'Ambiguous dependency name in batch: {dep_name}')
+            target = matches[0]
+            if target['id'] == job['id']:
+                raise ValueError(f'Job cannot depend on itself: {dep_name}')
+            if target['id'] not in seen:
+                seen.add(target['id'])
+                dep_ids.append(target['id'])
+                dep_names.append(dep_name)
+        job['depends_on'] = dep_ids
+        job['depends_on_names'] = dep_names
+    by_id = {j['id']: j for j in jobs}
+    state = {}  # 0=unvisited, 1=visiting, 2=done
+
+    def visit(job_id):
+        mark = state.get(job_id, 0)
+        if mark == 1:
+            raise ValueError('Cyclic job dependencies detected in batch')
+        if mark == 2:
+            return
+        state[job_id] = 1
+        for dep_id in by_id[job_id].get('depends_on', []):
+            visit(dep_id)
+        state[job_id] = 2
+
+    for job in jobs:
+        visit(job['id'])
 
 
 def batch_jobs(cfg, path, project=None):
@@ -624,9 +732,23 @@ def batch_jobs(cfg, path, project=None):
                     for key, value in zip(matrix, values):
                         text = text.replace('{' + key + '}', str(value))
                     expanded[field] = text
+            if 'depends_on' in expanded and expanded['depends_on'] is not None:
+                raw_deps = expanded['depends_on']
+                if not isinstance(raw_deps, list) or any(
+                        not isinstance(item, str) or not item.strip() for item in raw_deps):
+                    raise ValueError('depends_on must be a list of nonempty strings')
+                expanded_deps = []
+                for dep_text in raw_deps:
+                    for key, items in parameters.items():
+                        dep_text = dep_text.replace('{' + key + '}', ' '.join(map(str, items)))
+                    for key, value in zip(matrix, values):
+                        dep_text = dep_text.replace('{' + key + '}', str(value))
+                    expanded_deps.append(dep_text)
+                expanded['depends_on'] = expanded_deps
             job = new_job(cfg, expanded)
             job.update(batch_id=batch_id, batch_file=str(path.resolve()))
             jobs.append(job)
+    _resolve_batch_dependencies(jobs)
     return jobs
 
 
@@ -732,6 +854,8 @@ def parser():
     s.add_argument('--host', help='Restrict to one configured SSH host')
     s.add_argument('--min-free-gb', type=float, default=2,
                    help='Minimum free VRAM in GiB (default: 2)')
+    s.add_argument('--depends-on', nargs='+', default=[],
+                   help='Job IDs or prefixes that must succeed before this job starts')
     s.add_argument('--queue-only', action='store_true', help='Store locally without SSH')
     s = sub.add_parser('submit-batch', help='Submit a JSON job list or parameter matrix')
     s.add_argument('file', type=Path)
@@ -770,8 +894,24 @@ def main():
     configure_ssh(cfg, args.state_dir)
     queue = Queue(args.state_dir)
     if args.action == 'submit':
-        job = new_job(cfg, dict(command=args.command, name=args.name,
-                               host=args.host, min_free_gb=args.min_free_gb, project=args.project))
+        dep_ids, dep_names = [], []
+        if args.depends_on:
+            try:
+                deps = [queue.get(prefix) for prefix in args.depends_on]
+            except ValueError:
+                refresh_shared(cfg, queue)
+                deps = [queue.get(prefix) for prefix in args.depends_on]
+            seen = set()
+            for dep in deps:
+                if dep['id'] not in seen:
+                    seen.add(dep['id'])
+                    dep_ids.append(dep['id'])
+                    dep_names.append(dep.get('name') or dep['id'][:8])
+        spec = dict(command=args.command, name=args.name,
+                    host=args.host, min_free_gb=args.min_free_gb, project=args.project)
+        if dep_ids:
+            spec.update(depends_on=dep_ids, depends_on_names=dep_names)
+        job = new_job(cfg, spec)
         queue.put(job)
         print(job['id'], flush=True)
         if not args.queue_only:

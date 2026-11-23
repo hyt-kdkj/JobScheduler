@@ -136,7 +136,8 @@ def shared_sync(jobs):
     context = shared_lock() if jobs else contextlib.nullcontext(root_dir().parent / 'shared')
     with context as directory:
         allowed = {'id', 'command', 'name', 'created', 'status', 'requested_host',
-                   'min_free_mib', 'batch_id', 'batch_file', 'project', 'execution'}
+                   'min_free_mib', 'batch_id', 'batch_file', 'project', 'execution',
+                   'depends_on', 'depends_on_names'}
         for job in jobs:
             job_path(job['id'])  # Validate before using the ID as a filename.
             path = directory / (job['id'] + '.json')
@@ -153,7 +154,7 @@ def shared_sync(jobs):
         return {'jobs': records}
 
 
-def shared_cancel(job_id):
+def shared_cancel(job_id, error=None):
     job_path(job_id)
     with shared_lock() as directory:
         path = directory / (job_id + '.json')
@@ -162,6 +163,8 @@ def shared_cancel(job_id):
             job['cancel_requested'] = True
             if not job.get('host'):
                 job.update(status='cancelled', finished=time.time(), exit_code=None)
+                if error:
+                    job['error'] = error
             save(path, job)
         return job
 
@@ -813,7 +816,7 @@ def main(req):
         if action == 'shared_sync':
             return shared_sync(req.get('jobs', []))
         if action == 'shared_cancel':
-            return shared_cancel(req['id'])
+            return shared_cancel(req['id'], req.get('error'))
         if action == 'launch':
             return launch(req)
         if action == 'status':

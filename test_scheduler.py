@@ -1726,5 +1726,157 @@ else:
         self.assertTrue(gpu['accepting_jobs'])
 
 
+class DependencyTest(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name)
+        self.cfg = {
+            'container': 'c', 'workdir': '/w', 'idle_max_used_mib': 500,
+            'idle_max_utilization': 10, 'priorities': {'RTX 5000 Ada': 100},
+            'hosts': [{'ssh': 'host1'}],
+        }
+        self.queue = s.Queue(self.root / 'state')
+
+    def _write_batch(self, data):
+        path = self.root / 'batch.json'
+        path.write_text(json.dumps(data))
+        return path
+
+    def test_batch_matrix_depends_on_resolution_and_validation(self):
+        path = self._write_batch({
+            'jobs': [
+                {'name': 'train_{s}', 'command': 'echo train {s}', 'matrix': {'s': ['hw', 'urb']}},
+                {'name': 'eval_{s}_p{p}', 'depends_on': ['train_{s}'],
+                 'command': 'echo eval {s} {p}', 'matrix': {'s': ['hw', 'urb'], 'p': [0.8, 1.0]}},
+                {'name': 'plot_{s}_p{p}', 'depends_on': ['eval_{s}_p{p}'],
+                 'command': 'echo plot {s} {p}', 'matrix': {'s': ['hw', 'urb'], 'p': [0.8, 1.0]}},
+            ],
+        })
+        jobs = s.batch_jobs(self.cfg, path)
+        by_name = {j['name']: j for j in jobs}
+        self.assertEqual(len(jobs), 10)
+        self.assertEqual(by_name['eval_hw_p0.8']['depends_on'], [by_name['train_hw']['id']])
+        self.assertEqual(by_name['eval_hw_p0.8']['depends_on_names'], ['train_hw'])
+        self.assertEqual(by_name['plot_urb_p1.0']['depends_on'], [by_name['eval_urb_p1.0']['id']])
+
+        # Unknown dependency
+        bad_unknown = self._write_batch({'jobs': [
+            {'name': 'a', 'command': 'echo a', 'depends_on': ['missing']},
+        ]})
+        with self.assertRaisesRegex(ValueError, 'Unknown dependency'):
+            s.batch_jobs(self.cfg, bad_unknown)
+
+        # Self dependency
+        bad_self = self._write_batch({'jobs': [
+            {'name': 'a', 'command': 'echo a', 'depends_on': ['a']},
+        ]})
+        with self.assertRaisesRegex(ValueError, 'cannot depend on itself'):
+            s.batch_jobs(self.cfg, bad_self)
+
+        # Cyclic dependency
+        bad_cycle = self._write_batch({'jobs': [
+            {'name': 'a', 'command': 'echo a', 'depends_on': ['b']},
+            {'name': 'b', 'command': 'echo b', 'depends_on': ['a']},
+        ]})
+        with self.assertRaisesRegex(ValueError, 'Cyclic'):
+            s.batch_jobs(self.cfg, bad_cycle)
+
+        # Ambiguous dependency name
+        bad_dup = self._write_batch({'jobs': [
+            {'name': 'dup', 'command': 'echo 1'},
+            {'name': 'dup', 'command': 'echo 2'},
+            {'name': 'c', 'command': 'echo c', 'depends_on': ['dup']},
+        ]})
+        with self.assertRaisesRegex(ValueError, 'Ambiguous'):
+            s.batch_jobs(self.cfg, bad_dup)
+
+    def test_dispatch_waits_for_succeeded_and_fans_out_then_cascades_cancel_on_fail(self):
+        path = self._write_batch({
+            'jobs': [
+                {'name': 'train_hw', 'command': 'echo train_hw'},
+                {'name': 'train_urb', 'command': 'echo train_urb'},
+                {'name': 'eval_hw', 'depends_on': ['train_hw'], 'command': 'echo eval_hw'},
+                {'name': 'plot_hw', 'depends_on': ['eval_hw'], 'command': 'echo plot_hw'},
+                {'name': 'eval_urb', 'depends_on': ['train_urb'], 'command': 'echo eval_urb'},
+                {'name': 'plot_urb', 'depends_on': ['eval_urb'], 'command': 'echo plot_urb'},
+            ],
+        })
+        jobs = s.batch_jobs(self.cfg, path)
+        self.queue.add_many(jobs)
+        by_name = {j['name']: j['id'] for j in jobs}
+
+        launched = []
+        gpu_pool = [
+            {'index': 0, 'uuid': 'GPU-0', 'name': 'RTX 5000 Ada', 'total_mib': 32000,
+             'used_mib': 0, 'utilization': 0, 'idle': True, 'accepting_jobs': True, 'reserved_by': None},
+            {'index': 1, 'uuid': 'GPU-1', 'name': 'RTX 5000 Ada', 'total_mib': 32000,
+             'used_mib': 0, 'utilization': 0, 'idle': True, 'accepting_jobs': True, 'reserved_by': None},
+        ]
+        statuses = {}
+
+        def fake_remote(host, req):
+            action = req['action']
+            if action == 'probe':
+                return {'gpus': copy.deepcopy(gpu_pool)}
+            if action == 'launch':
+                launched.append(req['id'])
+                statuses[req['id']] = 'running'
+                return {'status': 'running', 'host': host, 'gpu': req['gpu']}
+            if action == 'status':
+                return {'status': statuses.get(req['id'], 'running')}
+            raise AssertionError(f'unexpected action {action}')
+
+        with patch.object(s, 'remote', side_effect=fake_remote):
+            # Pass 1: only train_hw and train_urb launch; eval/plot wait.
+            s.dispatch(self.cfg, self.queue)
+            self.assertEqual(set(launched), {by_name['train_hw'], by_name['train_urb']})
+            for name in ('eval_hw', 'plot_hw', 'eval_urb', 'plot_urb'):
+                self.assertEqual(self.queue.get(by_name[name])['status'], 'queued')
+
+            # Pass 2: train_hw succeeds, train_urb fails -> eval_hw launches, eval_urb & plot_urb cascade-cancel!
+            statuses[by_name['train_hw']] = 'succeeded'
+            statuses[by_name['train_urb']] = 'failed'
+            launched.clear()
+            s.dispatch(self.cfg, self.queue)
+            self.assertEqual(launched, [by_name['eval_hw']])
+            self.assertEqual(self.queue.get(by_name['plot_hw'])['status'], 'queued')
+            self.assertEqual(self.queue.get(by_name['eval_urb'])['status'], 'cancelled')
+            self.assertIn('train_urb failed', self.queue.get(by_name['eval_urb']).get('error', ''))
+            self.assertEqual(self.queue.get(by_name['plot_urb'])['status'], 'cancelled')
+            self.assertIn('eval_urb cancelled', self.queue.get(by_name['plot_urb']).get('error', ''))
+
+            # Pass 3: eval_hw succeeds -> plot_hw launches!
+            statuses[by_name['eval_hw']] = 'succeeded'
+            launched.clear()
+            s.dispatch(self.cfg, self.queue)
+            self.assertEqual(launched, [by_name['plot_hw']])
+
+    def test_shared_sync_preserves_depends_on_and_shared_cancel_propagates_error(self):
+        ns = {}
+        exec((s.HERE / 'remote.py').read_text(), ns)
+        shared_root = self.root / 'remote-state' / 'host1'
+        cfg = dict(self.cfg, shared_queue={'host': 'host1'})
+        path = self._write_batch({'jobs': [
+            {'name': 't', 'command': 'echo t'},
+            {'name': 'e', 'depends_on': ['t'], 'command': 'echo e'},
+        ]})
+        jobs = s.batch_jobs(cfg, path)
+        pc1 = s.Queue(self.root / 'pc1')
+        pc2 = s.Queue(self.root / 'pc2')
+        pc1.add_many(jobs)
+
+        with patch.dict(ns, root_dir=lambda: shared_root), \
+                patch.object(s, 'remote', side_effect=lambda host, req: ns['main'](req)):
+            s.refresh_shared(cfg, pc1, publish=True)
+            s.refresh_shared(cfg, pc2)
+            imported_e = pc2.get(jobs[1]['id'])
+            self.assertEqual(imported_e['depends_on'], [jobs[0]['id']])
+            self.assertEqual(imported_e['depends_on_names'], ['t'])
+            cancelled = ns['shared_cancel'](jobs[1]['id'], error='Dependency t failed')
+            self.assertEqual(cancelled['status'], 'cancelled')
+            self.assertEqual(cancelled['error'], 'Dependency t failed')
+
+
 if __name__ == '__main__':
     unittest.main()
