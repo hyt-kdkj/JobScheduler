@@ -1,0 +1,31 @@
+{
+  "defaults": {
+    "project": "V2VSimulator"
+  },
+  "jobs": [
+    {
+      "name": "wp_base_b1_train_highway_120_250k",
+      "command": "env OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 TF_NUM_INTRAOP_THREADS=2 TF_NUM_INTEROP_THREADS=1 python3 train_propose.py --path-layout v2 --method 0 --step 20 --encoder Transformer --epsilon-profile initial-0.5 --scenario highway --num-vehicles 120 --decision-input-revision camhist4 --reward-type prr-exact-marginal-reward1 --q-temperature 0.05 --return-mode rc_epoch_mean --epoch-bootstrap-gamma 0 --train-selection-policy two_stage_softmax --train-two-stage-max-hold-prob 0.8 --train-two-stage-band 0.10 --train-exclude-own-flow-conflicts"
+    },
+    {
+      "name": "wp_base_b2_train_highway_120_250k",
+      "command": "env OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 TF_NUM_INTRAOP_THREADS=2 TF_NUM_INTEROP_THREADS=1 python3 train_propose.py --path-layout v2 --method 0 --step 20 --encoder Transformer --epsilon-profile initial-0.5 --scenario highway --num-vehicles 120 --decision-input-revision camhist5 --reward-type prr-exact-marginal-reward1 --q-temperature 0.05 --return-mode rc_epoch_mean --epoch-bootstrap-gamma 0 --train-selection-policy two_stage_softmax --train-two-stage-max-hold-prob 0.8 --train-two-stage-band 0.10 --train-exclude-own-flow-conflicts --candidate-pool-context"
+    },
+    {
+      "name": "wp_base_b2_r2_train_highway_120_250k",
+      "command": "env OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 TF_NUM_INTRAOP_THREADS=2 TF_NUM_INTEROP_THREADS=1 python3 train_propose.py --path-layout v2 --method 0 --step 20 --encoder Transformer --epsilon-profile initial-0.5 --scenario highway --num-vehicles 120 --decision-input-revision camhist5 --reward-type prr-exact-marginal-reward2 --q-temperature 0.05 --return-mode rc_epoch_mean --epoch-bootstrap-gamma 0 --train-selection-policy two_stage_softmax --train-two-stage-max-hold-prob 0.8 --train-two-stage-band 0.10 --train-exclude-own-flow-conflicts --candidate-pool-context"
+    },
+    {
+      "name": "wp_base_b1_train_urban_200_250k",
+      "command": "env OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 TF_NUM_INTRAOP_THREADS=2 TF_NUM_INTEROP_THREADS=1 python3 train_propose.py --path-layout v2 --method 0 --step 20 --encoder Transformer --epsilon-profile initial-0.5 --scenario urban --num-vehicles 200 --decision-input-revision camhist4 --reward-type prr-exact-marginal-reward1 --q-temperature 0.05 --return-mode rc_epoch_mean --epoch-bootstrap-gamma 0 --train-selection-policy two_stage_softmax --train-two-stage-max-hold-prob 0.8 --train-two-stage-band 0.10 --train-exclude-own-flow-conflicts"
+    },
+    {
+      "name": "wp_base_b2_train_urban_200_250k",
+      "command": "env OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 TF_NUM_INTRAOP_THREADS=2 TF_NUM_INTEROP_THREADS=1 python3 train_propose.py --path-layout v2 --method 0 --step 20 --encoder Transformer --epsilon-profile initial-0.5 --scenario urban --num-vehicles 200 --decision-input-revision camhist5 --reward-type prr-exact-marginal-reward1 --q-temperature 0.05 --return-mode rc_epoch_mean --epoch-bootstrap-gamma 0 --train-selection-policy two_stage_softmax --train-two-stage-max-hold-prob 0.8 --train-two-stage-band 0.10 --train-exclude-own-flow-conflicts --candidate-pool-context"
+    },
+    {
+      "name": "wp_base_b2_r2_train_urban_200_250k",
+      "command": "env OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 TF_NUM_INTRAOP_THREADS=2 TF_NUM_INTEROP_THREADS=1 python3 train_propose.py --path-layout v2 --method 0 --step 20 --encoder Transformer --epsilon-profile initial-0.5 --scenario urban --num-vehicles 200 --decision-input-revision camhist5 --reward-type prr-exact-marginal-reward2 --q-temperature 0.05 --return-mode rc_epoch_mean --epoch-bootstrap-gamma 0 --train-selection-policy two_stage_softmax --train-two-stage-max-hold-prob 0.8 --train-two-stage-band 0.10 --train-exclude-own-flow-conflicts --candidate-pool-context"
+    }
+  ]
+}

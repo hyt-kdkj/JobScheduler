@@ -10,7 +10,7 @@
 cd ~/workspace/JobScheduler
 
 # method 0 の学習を一括投入（highway / urban の2件）
-python3 scheduler.py submit-batch jobs/V2VSimulator/method-0/train_propose.json
+python3 scheduler.py submit-batch jobs/V2VSimulator/method-0/train.json
 
 # 状態を確認（新しいジョブは開始しない）
 python3 scheduler.py status
@@ -30,10 +30,10 @@ python3 scheduler.py logs --running --lines 1000
 
 ```bash
 # 内容確認だけ。登録・SSH 接続なし
-python3 scheduler.py submit-batch jobs/V2VSimulator/method-0/train_propose.json --dry-run
+python3 scheduler.py submit-batch jobs/V2VSimulator/method-0/train.json --dry-run
 
 # ローカルのキューに登録だけ。次の dispatch で共有・投入される
-python3 scheduler.py submit-batch jobs/V2VSimulator/method-0/train_propose.json --queue-only
+python3 scheduler.py submit-batch jobs/V2VSimulator/method-0/train.json --queue-only
 
 # 1件だけ投入
 python3 scheduler.py submit --name highway_propose_step20 \

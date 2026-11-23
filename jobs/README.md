@@ -3,7 +3,7 @@
 現行の学習・評価・描画バッチは [V2VSimulator](V2VSimulator/README.md) にあります。`JobScheduler/` 内で実行します。実行プロジェクトは `V2VSimulator` です。
 
 ```bash
-python3 scheduler.py submit-batch jobs/V2VSimulator/method-0/train_propose.json --dry-run
+python3 scheduler.py submit-batch jobs/V2VSimulator/method-0/train.json --dry-run
 ```
 
 `python3 scheduler.py export`で履歴を`jobs/history.json`に書き出せます。`export --refresh`はSANの共有キューとリモート状態を取得してから書き出し、結果のrsyncは行いません。履歴JSONは記録用で、一括投入の入力にはなりません。

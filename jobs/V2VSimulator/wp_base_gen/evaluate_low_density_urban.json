@@ -1,0 +1,64 @@
+{
+  "defaults": {
+    "project": "V2VSimulator"
+  },
+  "jobs": [
+    {
+      "name": "wp_base_gen_prr2_eval_urban_200_p{hold}",
+      "command": "env OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 TF_NUM_INTRAOP_THREADS=2 TF_NUM_INTEROP_THREADS=1 python3 evaluate_methods.py --path-layout v2 --epoch-batch-rows 512 --mobility-trace-cache --method 0 --step 20 --encoder Transformer --epsilon-profile initial-0.5 --scenario urban --num-vehicles 200 --decision-input-revision camhist6 --pool-context-mode alt_rank --advantage-density-invariant --train-wide-exploration-percent 0.6 --train-wide-exploration-prob 0.5 --return-mode rc_epoch_mean --train-selection-policy two_stage_softmax --train-two-stage-max-hold-prob 0.8 --train-two-stage-band 0.1 --reward-type prr-exact-marginal-reward2 --physics-residual-q --train-exclude-own-flow-conflicts --agents SPS IPMI Propose --analysis-only --model urban:200 --load-slot 249999 --training-q-temperature 0.05 --q-temperature 0.05 --selection-policy two_stage_softmax --two-stage-hold-margin 0 --two-stage-band 0.1 --exclude-own-flow-conflicts --two-stage-max-hold-prob {hold}",
+      "matrix": {
+        "hold": [
+          0.8,
+          0.9,
+          1.0
+        ]
+      }
+    },
+    {
+      "name": "wp_base_gen_prr2_eval_urban_200_rri",
+      "command": "env OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 TF_NUM_INTRAOP_THREADS=2 TF_NUM_INTEROP_THREADS=1 python3 evaluate_methods.py --path-layout v2 --epoch-batch-rows 512 --mobility-trace-cache --method 0 --step 20 --encoder Transformer --epsilon-profile initial-0.5 --scenario urban --num-vehicles 200 --decision-input-revision camhist6 --pool-context-mode alt_rank --advantage-density-invariant --train-wide-exploration-percent 0.6 --train-wide-exploration-prob 0.5 --return-mode rc_epoch_mean --train-selection-policy two_stage_softmax --train-two-stage-max-hold-prob 0.8 --train-two-stage-band 0.1 --reward-type prr-exact-marginal-reward2 --physics-residual-q --train-exclude-own-flow-conflicts --agents SPS IPMI Propose --analysis-only --model urban:200 --load-slot 249999 --training-q-temperature 0.05 --q-temperature 0.05 --selection-policy two_stage_softmax --two-stage-hold-margin 0 --two-stage-band 0.1 --exclude-own-flow-conflicts --two-stage-rri-hold-probs 20:0.8,50:0.9,100:1.0"
+    },
+    {
+      "name": "wp_base_gen_prr2_eval_urban_200_rri_blind07",
+      "command": "env OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 TF_NUM_INTRAOP_THREADS=2 TF_NUM_INTEROP_THREADS=1 python3 evaluate_methods.py --path-layout v2 --epoch-batch-rows 512 --mobility-trace-cache --method 0 --step 20 --encoder Transformer --epsilon-profile initial-0.5 --scenario urban --num-vehicles 200 --decision-input-revision camhist6 --pool-context-mode alt_rank --advantage-density-invariant --train-wide-exploration-percent 0.6 --train-wide-exploration-prob 0.5 --return-mode rc_epoch_mean --train-selection-policy two_stage_softmax --train-two-stage-max-hold-prob 0.8 --train-two-stage-band 0.1 --reward-type prr-exact-marginal-reward2 --physics-residual-q --train-exclude-own-flow-conflicts --agents SPS IPMI Propose --analysis-only --model urban:200 --load-slot 249999 --training-q-temperature 0.05 --q-temperature 0.05 --selection-policy two_stage_softmax --two-stage-hold-margin 0 --two-stage-band 0.1 --exclude-own-flow-conflicts --two-stage-rri-hold-probs 20:0.8,50:0.9,100:1.0 --two-stage-blind-hold-prob 0.7"
+    },
+    {
+      "name": "wp_base_gen_prr1_eval_urban_200_p{hold}",
+      "command": "env OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 TF_NUM_INTRAOP_THREADS=2 TF_NUM_INTEROP_THREADS=1 python3 evaluate_methods.py --path-layout v2 --epoch-batch-rows 512 --mobility-trace-cache --method 0 --step 20 --encoder Transformer --epsilon-profile initial-0.5 --scenario urban --num-vehicles 200 --decision-input-revision camhist6 --pool-context-mode alt_rank --advantage-density-invariant --train-wide-exploration-percent 0.6 --train-wide-exploration-prob 0.5 --return-mode rc_epoch_mean --train-selection-policy two_stage_softmax --train-two-stage-max-hold-prob 0.8 --train-two-stage-band 0.1 --reward-type prr-exact-marginal-reward1 --physics-residual-q --train-exclude-own-flow-conflicts --agents SPS IPMI Propose --analysis-only --model urban:200 --load-slot 249999 --training-q-temperature 0.05 --q-temperature 0.05 --selection-policy two_stage_softmax --two-stage-hold-margin 0 --two-stage-band 0.1 --exclude-own-flow-conflicts --two-stage-max-hold-prob {hold}",
+      "matrix": {
+        "hold": [
+          0.8,
+          0.9,
+          1.0
+        ]
+      }
+    },
+    {
+      "name": "wp_base_gen_prr1_eval_urban_200_rri",
+      "command": "env OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 TF_NUM_INTRAOP_THREADS=2 TF_NUM_INTEROP_THREADS=1 python3 evaluate_methods.py --path-layout v2 --epoch-batch-rows 512 --mobility-trace-cache --method 0 --step 20 --encoder Transformer --epsilon-profile initial-0.5 --scenario urban --num-vehicles 200 --decision-input-revision camhist6 --pool-context-mode alt_rank --advantage-density-invariant --train-wide-exploration-percent 0.6 --train-wide-exploration-prob 0.5 --return-mode rc_epoch_mean --train-selection-policy two_stage_softmax --train-two-stage-max-hold-prob 0.8 --train-two-stage-band 0.1 --reward-type prr-exact-marginal-reward1 --physics-residual-q --train-exclude-own-flow-conflicts --agents SPS IPMI Propose --analysis-only --model urban:200 --load-slot 249999 --training-q-temperature 0.05 --q-temperature 0.05 --selection-policy two_stage_softmax --two-stage-hold-margin 0 --two-stage-band 0.1 --exclude-own-flow-conflicts --two-stage-rri-hold-probs 20:0.8,50:0.9,100:1.0"
+    },
+    {
+      "name": "wp_base_gen_prr1_eval_urban_200_rri_blind07",
+      "command": "env OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 TF_NUM_INTRAOP_THREADS=2 TF_NUM_INTEROP_THREADS=1 python3 evaluate_methods.py --path-layout v2 --epoch-batch-rows 512 --mobility-trace-cache --method 0 --step 20 --encoder Transformer --epsilon-profile initial-0.5 --scenario urban --num-vehicles 200 --decision-input-revision camhist6 --pool-context-mode alt_rank --advantage-density-invariant --train-wide-exploration-percent 0.6 --train-wide-exploration-prob 0.5 --return-mode rc_epoch_mean --train-selection-policy two_stage_softmax --train-two-stage-max-hold-prob 0.8 --train-two-stage-band 0.1 --reward-type prr-exact-marginal-reward1 --physics-residual-q --train-exclude-own-flow-conflicts --agents SPS IPMI Propose --analysis-only --model urban:200 --load-slot 249999 --training-q-temperature 0.05 --q-temperature 0.05 --selection-policy two_stage_softmax --two-stage-hold-margin 0 --two-stage-band 0.1 --exclude-own-flow-conflicts --two-stage-rri-hold-probs 20:0.8,50:0.9,100:1.0 --two-stage-blind-hold-prob 0.7"
+    },
+    {
+      "name": "wp_base_gen_nophys_prr2_eval_urban_200_p{hold}",
+      "command": "env OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 TF_NUM_INTRAOP_THREADS=2 TF_NUM_INTEROP_THREADS=1 python3 evaluate_methods.py --path-layout v2 --epoch-batch-rows 512 --mobility-trace-cache --method 0 --step 20 --encoder Transformer --epsilon-profile initial-0.5 --scenario urban --num-vehicles 200 --decision-input-revision camhist6 --pool-context-mode alt_rank --advantage-density-invariant --train-wide-exploration-percent 0.6 --train-wide-exploration-prob 0.5 --return-mode rc_epoch_mean --train-selection-policy two_stage_softmax --train-two-stage-max-hold-prob 0.8 --train-two-stage-band 0.1 --reward-type prr-exact-marginal-reward2 --train-exclude-own-flow-conflicts --agents SPS IPMI Propose --analysis-only --model urban:200 --load-slot 249999 --training-q-temperature 0.05 --q-temperature 0.05 --selection-policy two_stage_softmax --two-stage-hold-margin 0 --two-stage-band 0.1 --exclude-own-flow-conflicts --two-stage-max-hold-prob {hold}",
+      "matrix": {
+        "hold": [
+          0.8,
+          0.9,
+          1.0
+        ]
+      }
+    },
+    {
+      "name": "wp_base_gen_nophys_prr2_eval_urban_200_rri",
+      "command": "env OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 TF_NUM_INTRAOP_THREADS=2 TF_NUM_INTEROP_THREADS=1 python3 evaluate_methods.py --path-layout v2 --epoch-batch-rows 512 --mobility-trace-cache --method 0 --step 20 --encoder Transformer --epsilon-profile initial-0.5 --scenario urban --num-vehicles 200 --decision-input-revision camhist6 --pool-context-mode alt_rank --advantage-density-invariant --train-wide-exploration-percent 0.6 --train-wide-exploration-prob 0.5 --return-mode rc_epoch_mean --train-selection-policy two_stage_softmax --train-two-stage-max-hold-prob 0.8 --train-two-stage-band 0.1 --reward-type prr-exact-marginal-reward2 --train-exclude-own-flow-conflicts --agents SPS IPMI Propose --analysis-only --model urban:200 --load-slot 249999 --training-q-temperature 0.05 --q-temperature 0.05 --selection-policy two_stage_softmax --two-stage-hold-margin 0 --two-stage-band 0.1 --exclude-own-flow-conflicts --two-stage-rri-hold-probs 20:0.8,50:0.9,100:1.0"
+    },
+    {
+      "name": "wp_base_gen_nophys_prr2_eval_urban_200_rri_blind07",
+      "command": "env OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 TF_NUM_INTRAOP_THREADS=2 TF_NUM_INTEROP_THREADS=1 python3 evaluate_methods.py --path-layout v2 --epoch-batch-rows 512 --mobility-trace-cache --method 0 --step 20 --encoder Transformer --epsilon-profile initial-0.5 --scenario urban --num-vehicles 200 --decision-input-revision camhist6 --pool-context-mode alt_rank --advantage-density-invariant --train-wide-exploration-percent 0.6 --train-wide-exploration-prob 0.5 --return-mode rc_epoch_mean --train-selection-policy two_stage_softmax --train-two-stage-max-hold-prob 0.8 --train-two-stage-band 0.1 --reward-type prr-exact-marginal-reward2 --train-exclude-own-flow-conflicts --agents SPS IPMI Propose --analysis-only --model urban:200 --load-slot 249999 --training-q-temperature 0.05 --q-temperature 0.05 --selection-policy two_stage_softmax --two-stage-hold-margin 0 --two-stage-band 0.1 --exclude-own-flow-conflicts --two-stage-rri-hold-probs 20:0.8,50:0.9,100:1.0 --two-stage-blind-hold-prob 0.7"
+    }
+  ]
+}
