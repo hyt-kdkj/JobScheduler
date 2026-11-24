@@ -12,20 +12,12 @@
       "command": "env OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 TF_NUM_INTRAOP_THREADS=2 TF_NUM_INTEROP_THREADS=1 python3 train_propose.py --path-layout v2 --epoch-batch-rows 512 --mobility-trace-cache --method 0 --step 20 --encoder Transformer --epsilon-profile initial-0.5 --scenario highway --num-vehicles 120 --decision-input-revision camhist6 --pool-context-mode alt_rank --advantage-density-invariant --train-wide-exploration-percent 0.6 --train-wide-exploration-prob 0.5 --return-mode rc_epoch_mean --train-selection-policy two_stage_softmax --train-two-stage-max-hold-prob 0.8 --train-two-stage-band 0.1 --reward-type prr-exact-marginal-reward1 --physics-residual-q --q-temperature 0.05 --exclude-own-flow-conflicts"
     },
     {
-      "name": "wp_base_gen_nophys_prr2_train_highway_120_250k",
-      "command": "env OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 TF_NUM_INTRAOP_THREADS=2 TF_NUM_INTEROP_THREADS=1 python3 train_propose.py --path-layout v2 --epoch-batch-rows 512 --mobility-trace-cache --method 0 --step 20 --encoder Transformer --epsilon-profile initial-0.5 --scenario highway --num-vehicles 120 --decision-input-revision camhist6 --pool-context-mode alt_rank --advantage-density-invariant --train-wide-exploration-percent 0.6 --train-wide-exploration-prob 0.5 --return-mode rc_epoch_mean --train-selection-policy two_stage_softmax --train-two-stage-max-hold-prob 0.8 --train-two-stage-band 0.1 --reward-type prr-exact-marginal-reward2 --q-temperature 0.05 --exclude-own-flow-conflicts"
-    },
-    {
       "name": "wp_base_gen_prr2_train_urban_200_250k",
       "command": "env OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 TF_NUM_INTRAOP_THREADS=2 TF_NUM_INTEROP_THREADS=1 python3 train_propose.py --path-layout v2 --epoch-batch-rows 512 --mobility-trace-cache --method 0 --step 20 --encoder Transformer --epsilon-profile initial-0.5 --scenario urban --num-vehicles 200 --decision-input-revision camhist6 --pool-context-mode alt_rank --advantage-density-invariant --train-wide-exploration-percent 0.6 --train-wide-exploration-prob 0.5 --return-mode rc_epoch_mean --train-selection-policy two_stage_softmax --train-two-stage-max-hold-prob 0.8 --train-two-stage-band 0.1 --reward-type prr-exact-marginal-reward2 --physics-residual-q --q-temperature 0.05 --exclude-own-flow-conflicts"
     },
     {
       "name": "wp_base_gen_prr1_train_urban_200_250k",
       "command": "env OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 TF_NUM_INTRAOP_THREADS=2 TF_NUM_INTEROP_THREADS=1 python3 train_propose.py --path-layout v2 --epoch-batch-rows 512 --mobility-trace-cache --method 0 --step 20 --encoder Transformer --epsilon-profile initial-0.5 --scenario urban --num-vehicles 200 --decision-input-revision camhist6 --pool-context-mode alt_rank --advantage-density-invariant --train-wide-exploration-percent 0.6 --train-wide-exploration-prob 0.5 --return-mode rc_epoch_mean --train-selection-policy two_stage_softmax --train-two-stage-max-hold-prob 0.8 --train-two-stage-band 0.1 --reward-type prr-exact-marginal-reward1 --physics-residual-q --q-temperature 0.05 --exclude-own-flow-conflicts"
-    },
-    {
-      "name": "wp_base_gen_nophys_prr2_train_urban_200_250k",
-      "command": "env OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 TF_NUM_INTRAOP_THREADS=2 TF_NUM_INTEROP_THREADS=1 python3 train_propose.py --path-layout v2 --epoch-batch-rows 512 --mobility-trace-cache --method 0 --step 20 --encoder Transformer --epsilon-profile initial-0.5 --scenario urban --num-vehicles 200 --decision-input-revision camhist6 --pool-context-mode alt_rank --advantage-density-invariant --train-wide-exploration-percent 0.6 --train-wide-exploration-prob 0.5 --return-mode rc_epoch_mean --train-selection-policy two_stage_softmax --train-two-stage-max-hold-prob 0.8 --train-two-stage-band 0.1 --reward-type prr-exact-marginal-reward2 --q-temperature 0.05 --exclude-own-flow-conflicts"
     }
   ]
 }
