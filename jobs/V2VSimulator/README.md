@@ -29,8 +29,8 @@
 | `wp2/` | WP2（`camhist4`・二段階選択） | `train.json`, `evaluate[_two_stage]_low_density.json`, `plot[_two_stage]_low_density.json` |
 | `wp3/` | WP3（`camhist3`・3 頭分解・再選択 Replay・Expected-Softmax） | `train.json`, `evaluate_low_density.json`, `plot_low_density.json` |
 | `wp_base_a/` | WP-Base-A（既存 `camhist4` 重み＋再学習不要の選択修正） | `evaluate_{low,high}_density.json`（高密度は選抜 2 件：`p08 + ownhd` のみ）, `plot_{low,high}_density.json` |
-| `wp_base_b/` | WP-Base-B（0-byte 抜本再設計：`camhist5`＋`prr1/2`＋`rc_epoch_mean`） | `train.json`, `evaluate_low_density.json`, `plot_low_density.json`（※高密度は低密度の優位条件を選抜後に別途作成） |
-| `wp_base_gen/` | WP-Base-Gen（`camhist6`・代替 SPS 順位・密度不変 Advantage・物理残差・広窓探索） | `train.json`, `evaluate_low_density.json`, `plot_low_density.json`（※高密度は低密度の優位条件を選抜後に別途作成） |
+| `wp_base_b/` | WP-Base-B（0-byte 抜本再設計：`camhist5`＋`prr1/2`＋`rc_epoch_mean`） | `train.json`, `evaluate_{low,high}_density.json`（高密度は低密度 1 位 `B2 prr1` の `p=0.8/0.9` 選抜 4 件）, `plot_{low,high}_density.json` |
+| `wp_base_gen/` | WP-Base-Gen（`camhist6`・代替 SPS 順位・密度不変 Advantage・物理残差・広窓探索） | `train.json`, `evaluate_{low,high}_density.json`（高密度は `gen_prr1 {p1.0, rri}`＋`gen_prr2 {p1.0}` 選抜 6 件）, `plot_{low,high}_density.json` |
 
 ---
 
@@ -40,8 +40,8 @@
 # JobScheduler ルートで実行（投入時は --dry-run を外す）
 python3 scheduler.py submit-batch jobs/V2VSimulator/baseline/evaluate_low_density.json --dry-run
 python3 scheduler.py submit-batch jobs/V2VSimulator/wp_base_a/evaluate_high_density.json --dry-run
-python3 scheduler.py submit-batch jobs/V2VSimulator/wp_base_b/evaluate_low_density.json --dry-run
-python3 scheduler.py submit-batch jobs/V2VSimulator/wp_base_gen/evaluate_low_density.json --dry-run
+python3 scheduler.py submit-batch jobs/V2VSimulator/wp_base_b/evaluate_high_density.json --dry-run
+python3 scheduler.py submit-batch jobs/V2VSimulator/wp_base_gen/evaluate_high_density.json --dry-run
 ```
 
 原則として `train.json` → `evaluate_*_low_density.json` → `plot_*_low_density.json` の順に実行し、低密度結果を確認してから選抜条件のみ `evaluate_*_high_density.json` → `plot_*_high_density.json` を作成・実行する。
