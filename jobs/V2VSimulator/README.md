@@ -7,8 +7,8 @@
 ## 運用ルール・命名規則（厳守）
 
 ### 1. 高密度シナリオ（Highway 300 / Urban 500）の選抜追加計測ポリシー
-- 高密度シナリオは計測時間が非常に長いため、**すべての実験やパラメータ格子を高密度で網羅実行しない**。
-- まず **低密度（Highway 120 / Urban 200）** で評価・比較し、**低密度で性能が優れていたもの・確認したい気になる条件だけ** を選抜して、高密度の追加計測用バッチ（`evaluate_*_high_density.json` / `plot_*_high_density.json`）を作成する。
+- 高密度シナリオは計測時間が長いため、**すべての実験やパラメータ格子を高密度で網羅実行しない**。
+- **最初から `evaluate_*_high_density.json` / `plot_*_high_density.json` を作成してはいけない**。必ずまず **低密度（Highway 120 / Urban 200）** のバッチのみを作成・実行し、低密度でうまくいった条件の数件だけを選抜した後に、初めて高密度の追加計測用バッチを作成する。
 
 ### 2. ディレクトリ構成とファイル命名規則
 - **ディレクトリ = 実験系統（トラック）**：1 実験系統ごとに 1 フォルダを切る（ファイル名にフォルダ名の重複接頭辞は付けない）。
@@ -20,13 +20,13 @@
 
 ---
 
-## ディレクトリ一覧
+## ディレクトリ一覧（単一統一候補 `WP-Base-Gen` 系統＋ベースラインのみ）
 
-| ディレクトリ | 対象実験 | 含まれるバッチ |
+| ディレクトリ | 対象実験 | 含まれるバッチ（件数） |
 |---|---|---|
-| `baseline/` | SPS・IPMI ベースライン（H120/U200、H300/U500） | `evaluate_low_density.json`, `evaluate_high_density.json` |
-| `wp_base_b/` | WP-Base-B（`B2 prr1`：`camhist5`＋`prr1`＋`rc_epoch_mean`） | `train.json`（2 件）, `evaluate_{low,high}_density.json`（高密度 H300/U500 `p=0.8/0.9` 選抜 4 件）, `plot_{low,high}_density.json` |
-| `wp_base_gen/` | WP-Base-Gen（`gen_prr1` / `gen_prr2`：`camhist6`・代替 SPS 順位・密度不変 Advantage・物理残差・広窓探索） | `train.json`（4 件）, `evaluate_{low,high}_density.json`（高密度 H300/U500：`gen_prr1 {p1.0, rri}`＋`gen_prr2 {p1.0}` 選抜 6 件）, `plot_{low,high}_density.json` |
+| `baseline/` | SPS・IPMI ベースライン（H120/U200、H300/U500） | `evaluate_low_density.json` (4), `evaluate_high_density.json` (4) |
+| `wp_base_gen/` | WP-Base-Gen 学習・ベース評価（`gen_prr1` / `gen_prr2`：`camhist6`＋`alt_rank`＋`advinv`＋`physres`） | `train.json` (4), `evaluate_low_density.json` (4), `plot_low_density.json` (4), `evaluate_high_density.json` (2), `plot_high_density.json` (2) |
+| `wp_base_infer/` | **【最新主力】WP-Base-Infer**（`Gen_prr1` / `Gen_prr2` 既存重み＋推論最適化＋相対物理バイアス） | v1：`evaluate_{low,high}_density.json` (各 5), `plot_{low,high}_density.json` (各 5)<br>**v2（実行対象）**：`evaluate_v2_low_density.json` (8), `plot_v2_low_density.json` (8)（※v2 高密度は低密度結果から数件選抜後に作成） |
 
 ---
 
@@ -34,9 +34,6 @@
 
 ```bash
 # JobScheduler ルートで実行（投入時は --dry-run を外す）
-python3 scheduler.py submit-batch jobs/V2VSimulator/baseline/evaluate_high_density.json --dry-run
-python3 scheduler.py submit-batch jobs/V2VSimulator/wp_base_b/evaluate_high_density.json --dry-run
-python3 scheduler.py submit-batch jobs/V2VSimulator/wp_base_gen/evaluate_high_density.json --dry-run
+python3 scheduler.py submit-batch jobs/V2VSimulator/wp_base_infer/evaluate_v2_low_density.json --dry-run
+python3 scheduler.py submit-batch jobs/V2VSimulator/wp_base_infer/plot_v2_low_density.json --dry-run
 ```
-
-原則として `train.json` → `evaluate_*_low_density.json` → `plot_*_low_density.json` の順に実行し、低密度結果を確認してから選抜条件のみ `evaluate_*_high_density.json` → `plot_*_high_density.json` を作成・実行する。
