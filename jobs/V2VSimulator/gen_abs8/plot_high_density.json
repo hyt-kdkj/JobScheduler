@@ -1,0 +1,27 @@
+{
+  "defaults": {
+    "project": "V2VSimulator"
+  },
+  "jobs": [
+    {
+      "name": "plot_gen_abs8_{slot}_highway300",
+      "command": "env OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 TF_NUM_INTRAOP_THREADS=2 TF_NUM_INTEROP_THREADS=1 python3 plot_evaluation.py --scenario highway --num-vehicles 300 --mobility-trace-cache --method gen_abs8 --agents SPS IPMI Propose --analysis-only --load-slot {slot}",
+      "matrix": {
+        "slot": [
+          269999,
+          299999
+        ]
+      }
+    },
+    {
+      "name": "plot_gen_abs8_{slot}_urban500",
+      "command": "env OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 TF_NUM_INTRAOP_THREADS=2 TF_NUM_INTEROP_THREADS=1 python3 plot_evaluation.py --scenario urban --num-vehicles 500 --mobility-trace-cache --method gen_abs8 --agents SPS IPMI Propose --analysis-only --load-slot {slot}",
+      "matrix": {
+        "slot": [
+          269999,
+          299999
+        ]
+      }
+    }
+  ]
+}

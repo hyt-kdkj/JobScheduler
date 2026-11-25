@@ -25,10 +25,11 @@
 | ディレクトリ | 条件 | バッチ |
 |---|---|---|
 | `baseline/` | SPS・IPMI、H120/U200 と H300/U500 | `evaluate_low_density.json`、`evaluate_high_density.json` |
-| `gen_abs8/` | 絶対8方位、H120/U200 | `train.json`、`evaluate_low_density.json`、`plot_low_density.json` |
-| `gen_ego6/` | 自車基準6セクタ、H120/U200 | `train.json`、`evaluate_low_density.json`、`plot_low_density.json` |
+| `gen_abs8/` | 絶対8方位、H120/U200 ＋ 選抜 H300/U500（`269999`, `299999`） | `train.json`、`evaluate_low_density.json`、`plot_low_density.json`、`evaluate_high_density.json`、`plot_high_density.json` |
+| `gen_ego6/` | 自車基準6セクタ、H120/U200 ＋ 選抜 H300/U500（`299999`） | `train.json`、`evaluate_low_density.json`、`plot_low_density.json`、`evaluate_high_density.json`、`plot_high_density.json` |
+| `ego_rsrp/` | 自車基準6セクタ・復号 RSRP 時系列、H120/U200（低密度評価前） | `train.json`、`evaluate_low_density.json`、`plot_low_density.json` |
 
-提案法は H120/U200 で各 300,000 step 学習し、保存スロット 239999、269999、299999 を低密度だけで評価・描画する。先に共通ベースラインを計測すると、提案法の評価と描画で同じキャッシュを参照できる。
+提案法は H120/U200 で各 300,000 step 学習し、保存スロット 239999、269999、299999 を低密度で評価・描画したうえで、上位候補のみ高密度（H300/U500）へ選抜して追加計測する。先に共通ベースラインを計測すると、提案法の評価と描画で同じキャッシュを参照できる。
 
 ```bash
 python3 scheduler.py submit-batch jobs/V2VSimulator/gen_ego6/train.json --dry-run

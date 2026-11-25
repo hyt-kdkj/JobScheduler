@@ -1,0 +1,29 @@
+{
+  "defaults": {
+    "project": "V2VSimulator"
+  },
+  "jobs": [
+    {
+      "name": "plot_ego_rsrp_{slot}_highway120",
+      "command": "env OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 TF_NUM_INTRAOP_THREADS=2 TF_NUM_INTEROP_THREADS=1 python3 plot_evaluation.py --scenario highway --num-vehicles 120 --mobility-trace-cache --method ego_rsrp --agents SPS IPMI Propose --analysis-only --load-slot {slot}",
+      "matrix": {
+        "slot": [
+          239999,
+          269999,
+          299999
+        ]
+      }
+    },
+    {
+      "name": "plot_ego_rsrp_{slot}_urban200",
+      "command": "env OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 TF_NUM_INTRAOP_THREADS=2 TF_NUM_INTEROP_THREADS=1 python3 plot_evaluation.py --scenario urban --num-vehicles 200 --mobility-trace-cache --method ego_rsrp --agents SPS IPMI Propose --analysis-only --load-slot {slot}",
+      "matrix": {
+        "slot": [
+          239999,
+          269999,
+          299999
+        ]
+      }
+    }
+  ]
+}
