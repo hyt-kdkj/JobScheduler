@@ -4,12 +4,9 @@
   },
   "jobs": [
     {
-      "name": "eval_{agent}_highway_{num_vehicles}_analysis",
-      "command": "env OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 TF_NUM_INTRAOP_THREADS=2 TF_NUM_INTEROP_THREADS=1 python3 evaluate_methods.py --path-layout v2 --agents {agent} --step 20 --scenario highway --num-vehicles {num_vehicles} --analysis-only --epsilon-profile initial-0.5",
+      "name": "eval_{agent}_highway300",
+      "command": "env OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 TF_NUM_INTRAOP_THREADS=2 TF_NUM_INTEROP_THREADS=1 python3 evaluate_methods.py --scenario highway --num-vehicles 300 --mobility-trace-cache --agents {agent} --analysis-only",
       "matrix": {
-        "num_vehicles": [
-          300
-        ],
         "agent": [
           "SPS",
           "IPMI"
@@ -17,12 +14,9 @@
       }
     },
     {
-      "name": "eval_{agent}_urban_{num_vehicles}_analysis",
-      "command": "env OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 TF_NUM_INTRAOP_THREADS=2 TF_NUM_INTEROP_THREADS=1 python3 evaluate_methods.py --path-layout v2 --agents {agent} --step 20 --scenario urban --num-vehicles {num_vehicles} --analysis-only --epsilon-profile initial-0.5",
+      "name": "eval_{agent}_urban500",
+      "command": "env OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 TF_NUM_INTRAOP_THREADS=2 TF_NUM_INTEROP_THREADS=1 python3 evaluate_methods.py --scenario urban --num-vehicles 500 --mobility-trace-cache --agents {agent} --analysis-only",
       "matrix": {
-        "num_vehicles": [
-          500
-        ],
         "agent": [
           "SPS",
           "IPMI"

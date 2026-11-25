@@ -1,0 +1,15 @@
+{
+  "defaults": {
+    "project": "V2VSimulator"
+  },
+  "jobs": [
+    {
+      "name": "train_gen_abs8_highway120",
+      "command": "env OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 TF_NUM_INTRAOP_THREADS=2 TF_NUM_INTEROP_THREADS=1 python3 train_propose.py --scenario highway --num-vehicles 120 --mobility-trace-cache --method gen_abs8"
+    },
+    {
+      "name": "train_gen_abs8_urban200",
+      "command": "env OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 TF_NUM_INTRAOP_THREADS=2 TF_NUM_INTEROP_THREADS=1 python3 train_propose.py --scenario urban --num-vehicles 200 --mobility-trace-cache --method gen_abs8"
+    }
+  ]
+}
