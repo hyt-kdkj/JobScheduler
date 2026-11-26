@@ -1,0 +1,15 @@
+{
+  "defaults": {
+    "project": "V2VSimulator"
+  },
+  "jobs": [
+    {
+      "name": "evaluate_gen_ego6_top25_299999_highway300",
+      "command": "env OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 TF_NUM_INTRAOP_THREADS=2 TF_NUM_INTEROP_THREADS=1 python3 evaluate_methods.py --scenario highway --num-vehicles 300 --mobility-trace-cache --method gen_ego6 --agents SPS IPMI Propose --analysis-only --load-slot 299999 --policy-scale-mode top25"
+    },
+    {
+      "name": "evaluate_gen_ego6_top25_299999_urban500",
+      "command": "env OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 TF_NUM_INTRAOP_THREADS=2 TF_NUM_INTEROP_THREADS=1 python3 evaluate_methods.py --scenario urban --num-vehicles 500 --mobility-trace-cache --method gen_ego6 --agents SPS IPMI Propose --analysis-only --load-slot 299999 --policy-scale-mode top25"
+    }
+  ]
+}

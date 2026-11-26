@@ -25,13 +25,13 @@
 | ディレクトリ | 条件 | バッチ |
 |---|---|---|
 | `baseline/` | SPS・IPMI、H120/U200 と H300/U500 | `evaluate_low_density.json`、`evaluate_high_density.json` |
-| `gen_abs8/` | 絶対8方位、H120/U200 ＋ 選抜 H300/U500（`269999`, `299999`） | `train.json`、`evaluate_low_density.json`、`plot_low_density.json`、`evaluate_high_density.json`、`plot_high_density.json` |
-| `gen_ego6/` | 自車基準6セクタ、H120/U200 ＋ 選抜 H300/U500（`299999`） | `train.json`、`evaluate_low_density.json`、`plot_low_density.json`、`evaluate_high_density.json`、`plot_high_density.json` |
-| `ego_rsrp/` | 自車基準6セクタ・復号 RSRP 時系列、H120/U200（低密度評価前） | `train.json`、`evaluate_low_density.json`、`plot_low_density.json` |
+| `gen_abs8/` | 絶対8方位、H120/U200 ＋ 選抜 H300/U500（`269999`, `299999`、`fixed` / `top25`） | `train.json`、`evaluate[_top25]_{low,high}_density.json`、`plot_{low,high}_density.json`、`plot_top25_high_density.json` |
+| `gen_ego6/` | 自車基準6セクタ、H120/U200 ＋ 選抜 H300/U500（`299999`、`fixed` / `top25`） | `train.json`、`evaluate[_top25]_{low,high}_density.json`、`plot_{low,high}_density.json`、`plot_top25_high_density.json` |
+| `ego_rsrp/` | 自車基準6セクタ・復号 RSRP 時系列、H120/U200 ＋ 高密度 H300/U500（`fixed`: `239999/269999/299999`、`top25`: `269999`） | `train.json`、`evaluate[_top25]_{low,high}_density.json`、`plot[_top25]_{low,high}_density.json` |
 
 提案法は H120/U200 で各 300,000 step 学習し、保存スロット 239999、269999、299999 を低密度で評価・描画したうえで、上位候補のみ高密度（H300/U500）へ選抜して追加計測する。先に共通ベースラインを計測すると、提案法の評価と描画で同じキャッシュを参照できる。
 
-`gen_abs8/` と `gen_ego6/` の `evaluate_top25_low_density.json` は、既存の保存スロット 269999・299999 を H120/U200 で `--policy-scale-mode top25` に切り替えて評価する。SPS・IPMI のキャッシュは固定スケールの評価と共用する。描画時も評価と同じ引数で `plot_evaluation.py` に `--policy-scale-mode top25` を渡す。
+`gen_abs8/`、`gen_ego6/`、`ego_rsrp/` の `evaluate_top25_{low,high}_density.json` は、既存の保存スロットを `--policy-scale-mode top25` に切り替えて評価する（高密度は `gen_abs8: 269999/299999`、`gen_ego6: 299999`、`ego_rsrp: 269999`）。SPS・IPMI のキャッシュは固定スケールの評価と共用する。描画時も評価と同じ引数で `plot_evaluation.py` に `--policy-scale-mode top25` を渡す。
 
 ```bash
 python3 scheduler.py submit-batch jobs/V2VSimulator/gen_ego6/train.json --dry-run
