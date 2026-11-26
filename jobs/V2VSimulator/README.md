@@ -31,6 +31,8 @@
 
 提案法は H120/U200 で各 300,000 step 学習し、保存スロット 239999、269999、299999 を低密度で評価・描画したうえで、上位候補のみ高密度（H300/U500）へ選抜して追加計測する。先に共通ベースラインを計測すると、提案法の評価と描画で同じキャッシュを参照できる。
 
+`gen_abs8/` と `gen_ego6/` の `evaluate_top25_low_density.json` は、既存の保存スロット 269999・299999 を H120/U200 で `--policy-scale-mode top25` に切り替えて評価する。SPS・IPMI のキャッシュは固定スケールの評価と共用する。描画時も評価と同じ引数で `plot_evaluation.py` に `--policy-scale-mode top25` を渡す。
+
 ```bash
 python3 scheduler.py submit-batch jobs/V2VSimulator/gen_ego6/train.json --dry-run
 ```
