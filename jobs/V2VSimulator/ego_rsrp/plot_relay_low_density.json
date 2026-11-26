@@ -1,0 +1,29 @@
+{
+  "defaults": {
+    "project": "V2VSimulator"
+  },
+  "jobs": [
+    {
+      "name": "plot_ego_rsrp_relay_{relay_mode}_269999_highway120",
+      "command": "env OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 TF_NUM_INTRAOP_THREADS=2 TF_NUM_INTEROP_THREADS=1 python3 plot_evaluation.py --scenario highway --num-vehicles 120 --mobility-trace-cache --method ego_rsrp --agents SPS IPMI Propose --analysis-only --load-slot 269999 --policy-scale-mode boltzmann_two_stage --simple-max-hold-prob 0.8 --simple-top-fraction 1.0 --simple-temperature 0.03 --sci-relay-mode {relay_mode} --sci-relay-overlap-mode rf_and_hd --sci-relay-penalty 0.05",
+      "matrix": {
+        "relay_mode": [
+          "bitmap",
+          "conflict3",
+          "priority3"
+        ]
+      }
+    },
+    {
+      "name": "plot_ego_rsrp_relay_{relay_mode}_269999_urban200",
+      "command": "env OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 TF_NUM_INTRAOP_THREADS=2 TF_NUM_INTEROP_THREADS=1 python3 plot_evaluation.py --scenario urban --num-vehicles 200 --mobility-trace-cache --method ego_rsrp --agents SPS IPMI Propose --analysis-only --load-slot 269999 --policy-scale-mode boltzmann_two_stage --simple-max-hold-prob 0.8 --simple-top-fraction 1.0 --simple-temperature 0.03 --sci-relay-mode {relay_mode} --sci-relay-overlap-mode rf_and_hd --sci-relay-penalty 0.05",
+      "matrix": {
+        "relay_mode": [
+          "bitmap",
+          "conflict3",
+          "priority3"
+        ]
+      }
+    }
+  ]
+}
