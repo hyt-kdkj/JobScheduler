@@ -29,6 +29,7 @@
 | `gen_ego6/` | 自車基準6セクタ、H120/U200 ＋ 選抜 H300/U500（`299999`） | `train.json`、`evaluate_{low,high}_density.json`、`plot_{low,high}_density.json` |
 | `ego_rsrp/` | 自車基準6セクタ・復号 RSRP 時系列、H120/U200 ＋ 選抜 H300/U500（`269999`, `299999`；動的期待 Q 値 2 段階 `expected_q` 選抜 `p0.9_top{1.0,0.5}`・`T=0.01` 低密度感度確認・3GPP Rel-17 IUC Scheme 1 低密度先行） | `train.json`、`evaluate_{low,high}_density.json`、`plot_{low,high}_density.json`、`evaluate_expected_q_{low,high}_density.json`、`plot_expected_q_{low,high}_density.json`、`evaluate_expected_q_t001_low_density.json`、`plot_expected_q_t001_low_density.json`、`evaluate_iuc_low_density.json`、`plot_iuc_low_density.json` |
 | `uni_mix/` | 単一統合モデル（`--channel-model tr37885`・固定メートル `ego6_m4`・81次元ピュア無線観測・物理アンカー撤廃・H120+U200 50:50 混合学習・エンコーダ `transformer` / `lstm` 両学習・評価はいったん `transformer`・協調なし学習 → 評価時 `--iuc-mode` 後付け可） | `train.json`（2 ジョブ）、`evaluate_low_density.json`、`plot_low_density.json` |
+| `uni_mix2/` | TR 37.885、H120+U200 50:50 の単一重み学習（`transformer` / `lstm`）、評価・描画は Transformer の低密度 2 条件 × 3 保存スロット。学習時 IUC オフ、評価時に後付け可 | `train.json`（2 ジョブ）、`evaluate_low_density.json`（6 ジョブ）、`plot_low_density.json`（6 ジョブ） |
 
 提案法は H120/U200 で各 300,000 step 学習し、保存スロット 239999、269999、299999 を低密度で評価・描画したうえで、上位候補のみ高密度（H300/U500）へ選抜して追加計測する。先に共通ベースラインを計測すると、提案法の評価と描画で同じキャッシュを参照できる。不採用・比較完了となった `top25`・`simple`・`boltzmann` バッチは整理・削除済み。
 
