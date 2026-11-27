@@ -4,8 +4,8 @@
   },
   "jobs": [
     {
-      "name": "plot_uni_mix_slot{slot}_highway120",
-      "command": "env OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 TF_NUM_INTRAOP_THREADS=2 TF_NUM_INTEROP_THREADS=1 python3 plot_evaluation.py --scenario highway --num-vehicles 120 --mobility-trace-cache --method uni_mix --agents SPS IPMI Propose --analysis-only --load-slot {slot} --policy-scale-mode expected_q_two_stage --simple-max-hold-prob 0.9 --simple-top-fraction 1.0",
+      "name": "plot_uni_mix_tr37885_slot{slot}_highway120",
+      "command": "env OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 TF_NUM_INTRAOP_THREADS=2 TF_NUM_INTEROP_THREADS=1 python3 plot_evaluation.py --scenario highway --num-vehicles 120 --mobility-trace-cache --method uni_mix --channel-model tr37885 --agents SPS IPMI Propose --analysis-only --load-slot {slot} --policy-scale-mode expected_q_two_stage --simple-max-hold-prob 0.9 --simple-top-fraction 1.0",
       "matrix": {
         "slot": [
           239999,
@@ -15,8 +15,8 @@
       }
     },
     {
-      "name": "plot_uni_mix_slot{slot}_urban200",
-      "command": "env OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 TF_NUM_INTRAOP_THREADS=2 TF_NUM_INTEROP_THREADS=1 python3 plot_evaluation.py --scenario urban --num-vehicles 200 --mobility-trace-cache --method uni_mix --agents SPS IPMI Propose --analysis-only --load-slot {slot} --policy-scale-mode expected_q_two_stage --simple-max-hold-prob 0.9 --simple-top-fraction 1.0",
+      "name": "plot_uni_mix_tr37885_slot{slot}_urban200",
+      "command": "env OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 TF_NUM_INTRAOP_THREADS=2 TF_NUM_INTEROP_THREADS=1 python3 plot_evaluation.py --scenario urban --num-vehicles 200 --mobility-trace-cache --method uni_mix --channel-model tr37885 --agents SPS IPMI Propose --analysis-only --load-slot {slot} --policy-scale-mode expected_q_two_stage --simple-max-hold-prob 0.9 --simple-top-fraction 1.0",
       "matrix": {
         "slot": [
           239999,

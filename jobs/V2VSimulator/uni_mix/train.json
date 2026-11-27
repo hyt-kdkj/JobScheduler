@@ -4,8 +4,14 @@
   },
   "jobs": [
     {
-      "name": "train_uni_mix_mixed_h120_u200",
-      "command": "env OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 TF_NUM_INTRAOP_THREADS=2 TF_NUM_INTEROP_THREADS=1 python3 train_propose.py --method uni_mix --mobility-trace-cache --policy-scale-mode expected_q_two_stage --simple-max-hold-prob 0.9 --simple-top-fraction 1.0"
+      "name": "train_uni_mix_tr37885_{temporal_encoder}_mixed_h120_u200",
+      "command": "env OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 TF_NUM_INTRAOP_THREADS=2 TF_NUM_INTEROP_THREADS=1 python3 train_propose.py --method uni_mix --temporal-encoder {temporal_encoder} --channel-model tr37885 --mobility-trace-cache --policy-scale-mode expected_q_two_stage --simple-max-hold-prob 0.9 --simple-top-fraction 1.0",
+      "matrix": {
+        "temporal_encoder": [
+          "transformer",
+          "lstm"
+        ]
+      }
     }
   ]
 }

@@ -1,0 +1,27 @@
+{
+  "defaults": {
+    "project": "V2VSimulator"
+  },
+  "jobs": [
+    {
+      "name": "eval_{agent}_tr37885_highway300",
+      "command": "env OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 TF_NUM_INTRAOP_THREADS=2 TF_NUM_INTEROP_THREADS=1 python3 evaluate_methods.py --scenario highway --num-vehicles 300 --mobility-trace-cache --channel-model tr37885 --agents {agent} --analysis-only",
+      "matrix": {
+        "agent": [
+          "SPS",
+          "IPMI"
+        ]
+      }
+    },
+    {
+      "name": "eval_{agent}_tr37885_urban500",
+      "command": "env OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 TF_NUM_INTRAOP_THREADS=2 TF_NUM_INTEROP_THREADS=1 python3 evaluate_methods.py --scenario urban --num-vehicles 500 --mobility-trace-cache --channel-model tr37885 --agents {agent} --analysis-only",
+      "matrix": {
+        "agent": [
+          "SPS",
+          "IPMI"
+        ]
+      }
+    }
+  ]
+}
