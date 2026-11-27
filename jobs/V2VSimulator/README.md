@@ -27,13 +27,14 @@
 | `baseline/` | SPS・IPMI、H120/U200 と H300/U500 | `evaluate_low_density.json`、`evaluate_high_density.json` |
 | `gen_abs8/` | 絶対8方位、H120/U200 ＋ 選抜 H300/U500（`269999`, `299999`） | `train.json`、`evaluate_{low,high}_density.json`、`plot_{low,high}_density.json` |
 | `gen_ego6/` | 自車基準6セクタ、H120/U200 ＋ 選抜 H300/U500（`299999`） | `train.json`、`evaluate_{low,high}_density.json`、`plot_{low,high}_density.json` |
-| `ego_rsrp/` | 自車基準6セクタ・復号 RSRP 時系列、H120/U200 ＋ 選抜 H300/U500（`269999`, `299999`；純粋 Q 値選抜 `boltzmann:p0.8,T0.03` / `simple:p0.9,top50`） | `train.json`、`evaluate[_simple\|_boltzmann]_{low,high}_density.json`、`plot[_simple\|_boltzmann]_{low,high}_density.json`、`evaluate_relay_low_density.json`、`plot_relay_low_density.json` |
+| `ego_rsrp/` | 自車基準6セクタ・復号 RSRP 時系列、H120/U200 ＋ 選抜 H300/U500（`269999`, `299999`；動的期待 Q 値 2 段階 `expected_q` 選抜 `p0.9_top{1.0,0.5}`・3GPP Rel-17 IUC Scheme 1 低密度先行） | `train.json`、`evaluate_{low,high}_density.json`、`plot_{low,high}_density.json`、`evaluate_expected_q_{low,high}_density.json`、`plot_expected_q_{low,high}_density.json`、`evaluate_iuc_low_density.json`、`plot_iuc_low_density.json` |
+| `uni_mix/` | 単一統合モデル（固定メートル `ego6_m4`・81次元ピュア無線観測・物理アンカー撤廃・H120+U200 50:50 混合学習・協調なし学習 → 評価時 `--iuc-mode` 後付け可） | `train.json`、`evaluate_low_density.json`、`plot_low_density.json` |
 
-提案法は H120/U200 で各 300,000 step 学習し、保存スロット 239999、269999、299999 を低密度で評価・描画したうえで、上位候補のみ高密度（H300/U500）へ選抜して追加計測する。先に共通ベースラインを計測すると、提案法の評価と描画で同じキャッシュを参照できる。不採用となった `top25` バッチおよび劣位パラメータ（`simple:p0.8`, `boltzmann:T0.05`）は整理・削除済み。
+提案法は H120/U200 で各 300,000 step 学習し、保存スロット 239999、269999、299999 を低密度で評価・描画したうえで、上位候補のみ高密度（H300/U500）へ選抜して追加計測する。先に共通ベースラインを計測すると、提案法の評価と描画で同じキャッシュを参照できる。不採用・比較完了となった `top25`・`simple`・`boltzmann` バッチは整理・削除済み。
 
-`ego_rsrp/evaluate_boltzmann_{low,high}_density.json` と `ego_rsrp/plot_boltzmann_{low,high}_density.json` は、スロット 269999 の純粋 Q 値統一 Boltzmann 2 段階選択（`p_max=0.8`, `top_fraction=1.0`, `T=0.03`）を評価・描画する。`ego_rsrp/evaluate_simple_{low,high}_density.json` と `plot_simple_*` は低密度で目標突破した `simple_two_stage`（`p_max=0.9`, `top_fraction=0.5`）を評価・描画する。SPS・IPMI のキャッシュは固定スケールと共用する。
+`ego_rsrp/evaluate_expected_q_low_density.json` と `plot_expected_q_low_density.json` は、`expected_q_two_stage`（`max_hold_prob ∈ {1.0, 0.9, 0.8}`, `top_fraction ∈ {1.0, 0.5}`）を低密度先行（各 12 ジョブ）で評価・描画する。低密度上位 2 条件の **`p_max=0.9, top_fraction ∈ {1.0, 0.5}`** を選抜し、`evaluate_expected_q_high_density.json` / `plot_expected_q_high_density.json`（各 4 ジョブ、H300/U500）で高密度検証する。SPS・IPMI のキャッシュは固定スケールと共用する。
 
-`ego_rsrp/evaluate_relay_low_density.json` と対応する描画バッチは、同じ Boltzmann 設定の既存スロット 269999 で `bitmap`・`conflict3`・`priority3` を比較する。H120/U200 の各方式で `rf_and_hd`、減点係数 0.05 を使い、評価と描画を各 6 ジョブに展開する。
+`ego_rsrp/evaluate_iuc_low_density.json` と対応する描画バッチは、旧独自リレーと `iuc_hard` を撤去し、3GPP Rel-17 IUC Scheme 1 準拠ソフト統合の 2 案（`iuc_all`：全周囲、`iuc_front`：前方限定）を Basic 100 ms 限定・9 B（1 組合せ＝最大 3 資源）・TTL 100 ms・Noisy-OR 集約で H120/U200 低密度比較する（各 4 ジョブ）。
 
 ```bash
 python3 scheduler.py submit-batch jobs/V2VSimulator/ego_rsrp/evaluate_low_density.json --dry-run

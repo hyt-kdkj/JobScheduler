@@ -1,0 +1,27 @@
+{
+  "defaults": {
+    "project": "V2VSimulator"
+  },
+  "jobs": [
+    {
+      "name": "evaluate_ego_rsrp_{iuc_mode}_m9_269999_highway120",
+      "command": "env OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 TF_NUM_INTRAOP_THREADS=2 TF_NUM_INTEROP_THREADS=1 python3 evaluate_methods.py --scenario highway --num-vehicles 120 --mobility-trace-cache --method ego_rsrp --agents SPS IPMI Propose --analysis-only --load-slot 269999 --policy-scale-mode expected_q_two_stage --simple-max-hold-prob 0.9 --simple-top-fraction 1.0 --iuc-mode {iuc_mode} --iuc-tbs-margin-bytes 9",
+      "matrix": {
+        "iuc_mode": [
+          "iuc_all",
+          "iuc_front"
+        ]
+      }
+    },
+    {
+      "name": "evaluate_ego_rsrp_{iuc_mode}_m9_269999_urban200",
+      "command": "env OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 TF_NUM_INTRAOP_THREADS=2 TF_NUM_INTEROP_THREADS=1 python3 evaluate_methods.py --scenario urban --num-vehicles 200 --mobility-trace-cache --method ego_rsrp --agents SPS IPMI Propose --analysis-only --load-slot 269999 --policy-scale-mode expected_q_two_stage --simple-max-hold-prob 0.9 --simple-top-fraction 1.0 --iuc-mode {iuc_mode} --iuc-tbs-margin-bytes 9",
+      "matrix": {
+        "iuc_mode": [
+          "iuc_all",
+          "iuc_front"
+        ]
+      }
+    }
+  ]
+}
