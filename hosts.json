@@ -24,6 +24,12 @@
   "max_jobs_per_gpu": 2,
   "max_jobs_per_host": 2,
   "max_ssh_connections": 1,
+  "ssh_gateway": {
+    "host": "hpcgate",
+    "control_persist_seconds": 60,
+    "cooldown_seconds": 60,
+    "max_cooldown_seconds": 600
+  },
   "gpu_memory_headroom_mib": 1024,
   "excluded_gpu_names": ["P100"],
   "shared_queue": {

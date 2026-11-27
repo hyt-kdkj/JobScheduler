@@ -18,21 +18,33 @@ import subprocess
 import sys
 import time
 import uuid
+from ssh_gateway import GatewayTransport, GatewayUnavailable, validate_gateway
 
 HERE = Path(__file__).resolve().parent
 TERMINAL = {'succeeded', 'failed', 'cancelled'}
 ENVIRONMENT_KEYS = ('container', 'workdir', 'template_start_script', 'runtime_image')
 SSH_LOCK_DIRECTORY = HERE / 'state' / 'ssh-connections'
 SSH_CONNECTION_LIMITS = {}
+SSH_GATEWAY = None
 
 
 def configure_ssh(cfg, state_dir):
-    global SSH_LOCK_DIRECTORY
+    global SSH_LOCK_DIRECTORY, SSH_GATEWAY
     SSH_LOCK_DIRECTORY = state_dir / 'ssh-connections'
     SSH_CONNECTION_LIMITS.clear()
     SSH_CONNECTION_LIMITS.update({
         host['ssh']: host.get('max_ssh_connections', cfg.get('max_ssh_connections', 1))
         for host in cfg['hosts']})
+    SSH_GATEWAY = GatewayTransport(cfg['ssh_gateway']) if cfg.get('ssh_gateway') else None
+
+
+def ssh_command(read_only=False):
+    command = ['ssh', '-x', '-T', '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=10',
+               '-o', 'ControlMaster=no', '-o', 'ControlPath=none', '-o', 'ControlPersist=no',
+               '-o', 'ServerAliveInterval=10', '-o', 'ServerAliveCountMax=2']
+    if SSH_GATEWAY is not None:
+        command += SSH_GATEWAY.proxy_option(lock_timeout=2 if read_only else 15)
+    return command
 
 
 @contextmanager
@@ -76,12 +88,9 @@ def remote(host, request):
     program = 'SOURCE_CODE = ' + repr(source) + '\n' + source
     encoded = base64.b64encode(program.encode()).decode()
     loader = f"import base64; exec(compile(base64.b64decode({encoded!r}), '<remote>', 'exec'))"
-    cmd = ['ssh', '-T', '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=10',
-           '-o', 'ControlMaster=no', '-o', 'ControlPath=none', '-o', 'ControlPersist=no',
-           '-o', 'ServerAliveInterval=10', '-o', 'ServerAliveCountMax=2', host,
-           shlex.join(['python3', '-c', loader])]
     try:
         with ssh_connection_slot(host, timeout=2 if read_only else None):
+            cmd = ssh_command(read_only) + [host, shlex.join(['python3', '-c', loader])]
             result = subprocess.run(cmd, input=json.dumps(request), text=True,
                                     stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                     timeout=timeout)
@@ -90,7 +99,10 @@ def remote(host, request):
     except OSError as exc:
         raise RuntimeError(str(exc)) from exc
     if result.returncode:
-        raise RuntimeError(result.stderr.strip() or f'SSH exit {result.returncode}')
+        error = result.stderr.strip() or f'SSH exit {result.returncode}'
+        if SSH_GATEWAY is not None:
+            SSH_GATEWAY.check_failure(error)
+        raise RuntimeError(error)
     try:
         data = json.loads(result.stdout)
     except ValueError as exc:
@@ -102,6 +114,7 @@ def remote(host, request):
 
 def configuration(path):
     cfg = json.loads(path.read_text())
+    validate_gateway(cfg.get('ssh_gateway'))
     names = [h['ssh'] for h in cfg['hosts']]
     if not names or len(names) != len(set(names)):
         raise ValueError('hosts must contain unique SSH names')
@@ -308,6 +321,8 @@ def shared_rpc(cfg, request):
     for host in hosts:
         try:
             return remote(host, request)
+        except GatewayUnavailable:
+            raise  # All candidate hosts share this gateway; no more connects.
         except RuntimeError as exc:
             errors.append(f'{host}: {exc}')
     raise RuntimeError('Cannot access the SAN shared queue: ' + '; '.join(errors))
@@ -497,17 +512,13 @@ def sync_completed(cfg, queue):
         attempted = time.time()
         source = settings['source']
         destination = Path(settings['destination']).expanduser()
-        ssh = shlex.join(['ssh', '-T', '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=10',
-                          '-o', 'ControlMaster=no', '-o', 'ControlPath=none',
-                          '-o', 'ControlPersist=no', '-o', 'ServerAliveInterval=10',
-                          '-o', 'ServerAliveCountMax=2'])
-        # Keep the requested -az behavior: overwrite changed files, never --delete.
-        args = ['rsync', '-az', '--timeout=60', '-e', ssh, '--', source,
-                str(destination) + '/']
         print(f'Syncing results: {source} -> {destination}', flush=True)
         try:
             destination.mkdir(parents=True, exist_ok=True)
             with ssh_connection_slot(source.split(':', 1)[0]):
+                # Keep the requested -az behavior: overwrite, never --delete.
+                args = ['rsync', '-az', '--timeout=60', '-e', shlex.join(ssh_command()),
+                        '--', source, str(destination) + '/']
                 result = subprocess.run(args, text=True, stdout=subprocess.PIPE,
                                         stderr=subprocess.PIPE,
                                         timeout=settings.get('timeout_seconds', 1800))

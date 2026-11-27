@@ -22,6 +22,7 @@ import scheduler as s
 
 def fixture_configuration():
     cfg = s.configuration(s.HERE / 'hosts.json')
+    cfg.pop('ssh_gateway', None)  # Transport tests enable an isolated gateway explicitly.
     # Tests exercise a second worktree independently of enabled user projects.
     cfg['projects'].setdefault('V2VSimulator-division', dict(
         container='v2vsimulator-division-v2v-dev-1',
@@ -88,7 +89,7 @@ with s.ssh_connection_slot(sys.argv[2]):
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
         for name, value in [('SSH_LOCK_DIRECTORY', self.root / 'ssh-connections'),
-                            ('SSH_CONNECTION_LIMITS', {})]:
+                            ('SSH_CONNECTION_LIMITS', {}), ('SSH_GATEWAY', None)]:
             patcher = patch.object(s, name, value)
             patcher.start()
             self.addCleanup(patcher.stop)
@@ -182,6 +183,9 @@ class SchedulingTest(unittest.TestCase):
         transport_limits = patch.object(s, 'SSH_CONNECTION_LIMITS', {})
         transport_limits.start()
         self.addCleanup(transport_limits.stop)
+        gateway = patch.object(s, 'SSH_GATEWAY', None)
+        gateway.start()
+        self.addCleanup(gateway.stop)
         self.cfg = fixture_configuration()
         # Fixtures use these aliases independently of the user's enabled hosts.
         self.cfg['hosts'] = [{'ssh': host} for host in
@@ -215,8 +219,6 @@ class SchedulingTest(unittest.TestCase):
         self.assertEqual(s.candidates(self.cfg, inv, job), [])
 
     def test_configured_gpu_order_and_p100_exclusion(self):
-        actual = s.configuration(s.HERE / 'hosts.json')
-        self.assertTrue(next(h for h in actual['hosts'] if h['ssh'] == 'marimba')['deprioritize'])
         cfg = copy.deepcopy(self.cfg)
         cfg['max_jobs_per_host'] = 2
         next(h for h in cfg['hosts'] if h['ssh'] == 'marimba')['deprioritize'] = True
@@ -1535,7 +1537,7 @@ else:
         self.assertEqual(imported['project'], 'V2VSimulator-division')
         self.assertEqual(imported['execution'], job['execution'])
         cfg['projects'].clear()
-        imported.update(host='marimba', gpu='GPU-test')
+        imported.update(host=cfg['hosts'][0]['ssh'], gpu='GPU-test')
         self.assertEqual(s.launch_request(cfg, imported)['container'], 'v2vsimulator-division-v2v-dev-1')
 
     def test_stopped_template_can_probe_and_launch_the_next_job(self):

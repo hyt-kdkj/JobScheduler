@@ -25,6 +25,10 @@ else
   dispatch_status=$?
 fi
 printf '[%s] Scheduled dispatch finished (exit=%s).\n' "$(date --iso-8601=seconds)" "$dispatch_status"
+if (( dispatch_status != 0 )); then
+  printf '[%s] Dispatch failed; skipping log collection to avoid more SSH attempts.\n' "$(date --iso-8601=seconds)"
+  exit "$dispatch_status"
+fi
 
 printf '[%s] Scheduled log collection started.\n' "$(date --iso-8601=seconds)"
 if /usr/bin/python3 -u "$SCRIPT_DIR/scheduler.py" logs --running --lines 1000 --output-dir logs/current; then
@@ -33,7 +37,4 @@ else
   logs_status=$?
 fi
 printf '[%s] Scheduled log collection finished (exit=%s).\n' "$(date --iso-8601=seconds)" "$logs_status"
-if (( dispatch_status != 0 )); then
-  exit "$dispatch_status"
-fi
 exit "$logs_status"
