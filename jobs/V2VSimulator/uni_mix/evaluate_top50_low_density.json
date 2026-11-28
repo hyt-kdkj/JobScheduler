@@ -1,0 +1,17 @@
+{
+  "defaults": {
+    "project": "V2VSimulator"
+  },
+  "jobs": [
+    {
+      "name": "evaluate_uni_mix_tr37885_top50_slot239999_highway120",
+      "command": "env OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 TF_NUM_INTRAOP_THREADS=2 TF_NUM_INTEROP_THREADS=1 python3 evaluate_methods.py --scenario highway --num-vehicles 120 --mobility-trace-cache --method uni_mix --channel-model tr37885 --agents SPS IPMI Propose --analysis-only --load-slot 239999 --policy-scale-mode expected_q_two_stage --simple-max-hold-prob 0.9 --simple-top-fraction 0.5",
+      "matrix": {}
+    },
+    {
+      "name": "evaluate_uni_mix_tr37885_top50_slot239999_urban200",
+      "command": "env OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 TF_NUM_INTRAOP_THREADS=2 TF_NUM_INTEROP_THREADS=1 python3 evaluate_methods.py --scenario urban --num-vehicles 200 --mobility-trace-cache --method uni_mix --channel-model tr37885 --agents SPS IPMI Propose --analysis-only --load-slot 239999 --policy-scale-mode expected_q_two_stage --simple-max-hold-prob 0.9 --simple-top-fraction 0.5",
+      "matrix": {}
+    }
+  ]
+}

@@ -8,7 +8,6 @@
       "command": "env OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 TF_NUM_INTRAOP_THREADS=2 TF_NUM_INTEROP_THREADS=1 python3 evaluate_methods.py --scenario highway --num-vehicles 120 --mobility-trace-cache --method uni_mix2 --temporal-encoder transformer --channel-model tr37885 --agents SPS IPMI Propose --analysis-only --load-slot {slot} --policy-scale-mode expected_q_two_stage --simple-max-hold-prob 0.9 --simple-top-fraction 1.0",
       "matrix": {
         "slot": [
-          239999,
           269999,
           299999
         ]
@@ -19,7 +18,7 @@
       "command": "env OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 TF_NUM_INTRAOP_THREADS=2 TF_NUM_INTEROP_THREADS=1 python3 evaluate_methods.py --scenario urban --num-vehicles 200 --mobility-trace-cache --method uni_mix2 --temporal-encoder transformer --channel-model tr37885 --agents SPS IPMI Propose --analysis-only --load-slot {slot} --policy-scale-mode expected_q_two_stage --simple-max-hold-prob 0.9 --simple-top-fraction 1.0",
       "matrix": {
         "slot": [
-          239999,
+
           269999,
           299999
         ]

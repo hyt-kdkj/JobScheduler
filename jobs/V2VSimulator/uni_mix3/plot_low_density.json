@@ -1,0 +1,37 @@
+{
+  "defaults": {
+    "project": "V2VSimulator"
+  },
+  "jobs": [
+    {
+      "name": "plot_uni_mix3_tr37885_{temporal_encoder}_slot{slot}_highway120",
+      "command": "env OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 TF_NUM_INTRAOP_THREADS=2 TF_NUM_INTEROP_THREADS=1 python3 plot_evaluation.py --method uni_mix3 --temporal-encoder {temporal_encoder} --channel-model tr37885 --mobility-trace-cache --scenario highway --num-vehicles 120 --agents SPS IPMI Propose --analysis-only --load-slot {slot} --policy-scale-mode expected_q_two_stage --simple-max-hold-prob 0.9 --simple-top-fraction 1.0 --plot-only",
+      "matrix": {
+        "temporal_encoder": [
+          "transformer",
+          "lstm"
+        ],
+        "slot": [
+          239999,
+          269999,
+          299999
+        ]
+      }
+    },
+    {
+      "name": "plot_uni_mix3_tr37885_{temporal_encoder}_slot{slot}_urban200",
+      "command": "env OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 TF_NUM_INTRAOP_THREADS=2 TF_NUM_INTEROP_THREADS=1 python3 plot_evaluation.py --method uni_mix3 --temporal-encoder {temporal_encoder} --channel-model tr37885 --mobility-trace-cache --scenario urban --num-vehicles 200 --agents SPS IPMI Propose --analysis-only --load-slot {slot} --policy-scale-mode expected_q_two_stage --simple-max-hold-prob 0.9 --simple-top-fraction 1.0 --plot-only",
+      "matrix": {
+        "temporal_encoder": [
+          "transformer",
+          "lstm"
+        ],
+        "slot": [
+          239999,
+          269999,
+          299999
+        ]
+      }
+    }
+  ]
+}
